@@ -3,7 +3,7 @@
     {
       "target_name": "clod_mac_ax",
       "sources": ["mac_ax.mm"],
-      "include_dirs": ["<!@(node -p \"require('node-addon-api').include\")"],
+      "include_dirs": ["../../node_modules/node-addon-api"],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS", "NAPI_VERSION=8"],
       "conditions": [
         ["OS=='mac'", {
