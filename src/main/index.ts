@@ -10,7 +10,8 @@ import { log as _log, LOG_FILE, flushLogs } from './logger'
 import { getCliEnv } from './cli-env'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
-import { registerOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
+import { registerModifierDoubleTap, stopModifierDoubleTap } from './modifier-double-tap'
+import { clampRectToArea } from './window-bounds'
 
 const DEBUG_MODE = process.env.CLOD_DEBUG === '1'
 const SPACES_DEBUG = DEBUG_MODE || process.env.CLOD_SPACES_DEBUG === '1'
@@ -76,11 +77,22 @@ const PILL_BOTTOM_MARGIN = 24
 type WindowPosition = 'center' | 'right'
 let windowPosition: WindowPosition = 'center'
 
-// Overlay toggle hotkey. 'double-option' = double-tap Option (default, via uiohook).
-// 'accelerator' = a custom Electron global shortcut. Cmd+Shift+K is always a fallback.
-type HotkeyMode = 'double-option' | 'accelerator'
+// Overlay toggle hotkey. 'double-option' / 'double-command' = double-tap that modifier
+// (default Option, via uiohook). 'accelerator' = a custom Electron global shortcut.
+// Cmd+Shift+K is always a fallback.
+type HotkeyMode = 'double-option' | 'double-command' | 'accelerator'
 let hotkeyMode: HotkeyMode = 'double-option'
 let registeredAccelerator: string | null = null
+
+/**
+ * Keep the overlay inside the work area of whichever display it sits on.
+ * The window is frameless and click-through, so once it is dragged off-screen
+ * there is nothing left to grab — it stays invisible across hide/show cycles.
+ */
+function clampToDisplay(bounds: Electron.Rectangle): Electron.Rectangle {
+  const display = screen.getDisplayMatching(bounds)
+  return clampRectToArea(bounds, display.workArea)
+}
 
 /** X coordinate for the window given the current position preference. */
 function computeWindowX(dx: number, sw: number): number {
@@ -146,6 +158,32 @@ controlPlane.on('error', (tabId: string, error: EnrichedError) => {
 
 // ─── Window Creation ───
 
+/**
+ * Report the overlay to the Accessibility API as "AXSystemDialog" — the same
+ * subrole Raycast/Spotlight-style panels use. Tiling window managers
+ * (AeroSpace, yabai) classify such windows as transient popups and ignore
+ * them. With Electron's default "AXStandardWindow" subrole, AeroSpace binds
+ * the overlay into its workspace tree: every show rebuilds the layout
+ * (rearranging the accordion) and every hide force-focuses another window.
+ * Verified against AeroSpace's window heuristics; see
+ * docs/AEROSPACE-OVERLAY-ISSUE.md.
+ */
+function applyOverlayAxIdentity(win: BrowserWindow): void {
+  if (process.platform !== 'darwin') return
+  const addonPath = join(__dirname, '../../resources/native/clod_mac_ax.node')
+  try {
+    const native = require(addonPath) as {
+      setWindowSubrole: (handle: Buffer, subrole: string) => boolean
+    }
+    const applied = native.setWindowSubrole(win.getNativeWindowHandle(), 'AXSystemDialog')
+    log(`[ax] overlay subrole AXSystemDialog applied=${applied}`)
+  } catch (err) {
+    // Non-fatal: without the addon the overlay still works, but tiling window
+    // managers will manage it as a normal window again.
+    log(`[ax] native addon unavailable (${addonPath}): ${String(err)}`)
+  }
+}
+
 function createWindow(): void {
   const cursor = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(cursor)
@@ -160,7 +198,22 @@ function createWindow(): void {
     height: PILL_HEIGHT,
     x,
     y,
-    ...(process.platform === 'darwin' ? { type: 'panel' as const } : {}),  // NSPanel — non-activating, joins all spaces
+    ...(process.platform === 'darwin'
+      ? {
+          type: 'panel' as const, // non-activating, joins all spaces
+          // Keep the borderless style mask. The default (roundedCorners: true)
+          // gives frameless windows a hidden titled frame whose traffic-light
+          // buttons are still exposed through the Accessibility API, making
+          // tiling window managers treat the overlay as a standard manageable
+          // window. Visually inert: the pill is drawn entirely in CSS on a
+          // transparent window. See docs/AEROSPACE-OVERLAY-ISSUE.md.
+          roundedCorners: false,
+          minimizable: false,
+          maximizable: false,
+          closable: false,
+          fullscreenable: false,
+        }
+      : {}),
     frame: false,
     transparent: true,
     resizable: false,
@@ -187,6 +240,7 @@ function createWindow(): void {
   // but explicit flags ensure correct behavior on older Electron builds.
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   mainWindow.setAlwaysOnTop(true, 'screen-saver')
+  applyOverlayAxIdentity(mainWindow)
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event) => {
     event.preventDefault()
@@ -224,6 +278,9 @@ function showWindow(source = 'unknown'): void {
   const toggleId = ++toggleSequence
 
   if (lastWindowBounds) {
+    // Re-clamp on every show: the display layout may have changed while hidden
+    // (external monitor unplugged), leaving the saved bounds off-screen.
+    lastWindowBounds = clampToDisplay(lastWindowBounds)
     mainWindow.setBounds(lastWindowBounds)
   }
 
@@ -237,13 +294,19 @@ function showWindow(source = 'unknown'): void {
     log(`[spaces] showWindow#${toggleId} source=${source} preserve-bounds=(${b.x},${b.y},${b.width}x${b.height})`)
     snapshotWindowState(`showWindow#${toggleId} pre-show`)
   }
-  // As an accessory app (app.dock.hide), show() + focus gives keyboard
-  // without deactivating the active app — hover preserved everywhere.
+  // Show without activating the app. As an accessory app (app.dock.hide) with an
+  // NSPanel, the window can become key — and so receive keyboard — while the app
+  // the user was in stays active. Deliberately no webContents.focus() here: that
+  // triggers applicationDidBecomeActive, which deactivates the previous app and
+  // makes tiling window managers re-layout. The renderer focuses the textarea
+  // itself on WINDOW_SHOWN, so DOM focus does not depend on this.
   mainWindow.show()
   if (lastWindowBounds) {
+    // Re-clamp on every show: the display layout may have changed while hidden
+    // (external monitor unplugged), leaving the saved bounds off-screen.
+    lastWindowBounds = clampToDisplay(lastWindowBounds)
     mainWindow.setBounds(lastWindowBounds)
   }
-  mainWindow.webContents.focus()
   broadcast(IPC.WINDOW_SHOWN)
   if (SPACES_DEBUG) scheduleToggleSnapshots(toggleId, 'show')
 }
@@ -265,6 +328,15 @@ function resetWindowPosition(): void {
   lastWindowBounds = mainWindow.getBounds()
 }
 
+/**
+ * Hide the overlay. Nothing to restore: showWindow never activates this app, so
+ * whatever the user was in kept its focus the whole time.
+ */
+function hideWindow(): void {
+  if (!mainWindow) return
+  mainWindow.hide()
+}
+
 function toggleWindow(source = 'unknown'): void {
   if (!mainWindow) return
   const toggleId = ++toggleSequence
@@ -274,7 +346,7 @@ function toggleWindow(source = 'unknown'): void {
   }
 
   if (mainWindow.isVisible()) {
-    mainWindow.hide()
+    hideWindow()
     if (SPACES_DEBUG) scheduleToggleSnapshots(toggleId, 'hide')
   } else {
     showWindow(source)
@@ -298,7 +370,7 @@ ipcMain.handle(IPC.ANIMATE_HEIGHT, () => {
 })
 
 ipcMain.on(IPC.HIDE_WINDOW, () => {
-  mainWindow?.hide()
+  hideWindow()
 })
 
 ipcMain.handle(IPC.IS_VISIBLE, () => {
@@ -318,10 +390,15 @@ ipcMain.on(IPC.SET_IGNORE_MOUSE_EVENTS, (event, ignore: boolean, options?: { for
 ipcMain.on(IPC.START_WINDOW_DRAG, (event, deltaX: number, deltaY: number) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (win && !win.isDestroyed()) {
-    const [x, y] = win.getPosition()
+    const bounds = win.getBounds()
     // Vertical is handled in two phases in the renderer: window first (until macOS clamps),
     // then CSS translateY within the window — so deltaY here is always within allowed range
-    win.setPosition(Math.round(x + deltaX), Math.round(y + deltaY))
+    const moved = clampToDisplay({
+      ...bounds,
+      x: Math.round(bounds.x + deltaX),
+      y: Math.round(bounds.y + deltaY),
+    })
+    win.setPosition(moved.x, moved.y)
     lastWindowBounds = win.getBounds()
   }
 })
@@ -364,7 +441,8 @@ function configureHotkey(mode: HotkeyMode, accelerator: string): void {
 }
 
 ipcMain.on(IPC.SET_HOTKEY, (_event, mode: string, accelerator: string) => {
-  const m: HotkeyMode = mode === 'accelerator' ? 'accelerator' : 'double-option'
+  const m: HotkeyMode =
+    mode === 'accelerator' || mode === 'double-command' ? mode : 'double-option'
   log(`IPC SET_HOTKEY: mode=${m} accel=${accelerator || '(none)'}`)
   configureHotkey(m, typeof accelerator === 'string' ? accelerator : '')
 })
@@ -857,8 +935,9 @@ ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
     return null
   } finally {
     if (mainWindow) {
+      // No webContents.focus() — see showWindow(): activating the app disturbs
+      // tiling window managers. The renderer refocuses the textarea itself.
       mainWindow.show()
-      mainWindow.webContents.focus()
     }
     broadcast(IPC.WINDOW_SHOWN)
     if (SPACES_DEBUG) {
@@ -1296,11 +1375,14 @@ app.whenReady().then(async () => {
   }
 
 
-  // Primary: double-tap Option (via global key hook — needs Accessibility permission).
-  // The hook always runs but only toggles when hotkeyMode is 'double-option', so
-  // switching modes at runtime needs no start/stop of the native hook.
+  // Primary: double-tap Option or Command (via global key hook — needs Accessibility
+  // permission). The hook watches both modifiers but only toggles for the one matching
+  // hotkeyMode, so switching modes at runtime needs no start/stop of the native hook.
   // Fallback: Cmd+Shift+K always works even if Accessibility is denied.
-  registerOptionDoubleTap(() => { if (hotkeyMode === 'double-option') toggleWindow('double-tap Option') })
+  registerModifierDoubleTap((mod) => {
+    if (mod === 'option' && hotkeyMode === 'double-option') toggleWindow('double-tap Option')
+    if (mod === 'command' && hotkeyMode === 'double-command') toggleWindow('double-tap Command')
+  })
   globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
 
   const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
@@ -1324,7 +1406,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('will-quit', () => {
-  stopOptionDoubleTap()
+  stopModifierDoubleTap()
   globalShortcut.unregisterAll()
   controlPlane.shutdown()
   flushLogs()
