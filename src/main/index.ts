@@ -71,6 +71,10 @@ const controlPlane = new ControlPlane()
 // user-resized overlay fits. Updated by the renderer via SET_WINDOW_SIZE.
 let windowWidth = BASE_WINDOW_WIDTH
 let windowHeight = BASE_WINDOW_HEIGHT
+// Where the window's bottom edge is meant to be. Kept apart from its actual
+// bounds so that being clamped to the screen at a large size doesn't shift the
+// overlay once it shrinks again.
+let anchorBottom: number | null = null
 // Gap between the work-area bottom and the window bottom. The input sits ~10px
 // above the window bottom, so the visible gap ≈ 16px, matching the right inset.
 const PILL_BOTTOM_MARGIN = 6
@@ -197,6 +201,7 @@ function createWindow(): void {
     },
   })
   lastWindowBounds = mainWindow.getBounds()
+  anchorBottom = y + windowHeight
 
   // Belt-and-suspenders: panel already joins all spaces and floats,
   // but explicit flags ensure correct behavior on older Electron builds.
@@ -314,6 +319,7 @@ function resetWindowPosition(): void {
     height: windowHeight,
   })
   lastWindowBounds = mainWindow.getBounds()
+  anchorBottom = lastWindowBounds.y + lastWindowBounds.height
 }
 
 function toggleWindow(source = 'unknown'): void {
@@ -404,8 +410,11 @@ ipcMain.on(IPC.SET_WINDOW_SIZE, (event, size: { width: number; height: number })
   if (b.width === w && b.height === h) return
   windowWidth = w
   windowHeight = h
+  const workArea = screen.getDisplayMatching(b).workArea
+  const bottom = anchorBottom ?? b.y + b.height
   const x = windowPosition === 'right' ? b.x + b.width - w : Math.round(b.x + b.width / 2 - w / 2)
-  win.setBounds({ x, y: b.y + b.height - h, width: w, height: h })
+  const y = Math.max(workArea.y, bottom - h) // too tall: pin to the top instead
+  win.setBounds({ x, y, width: w, height: h })
   lastWindowBounds = win.getBounds()
 })
 
@@ -418,6 +427,7 @@ ipcMain.on(IPC.START_WINDOW_DRAG, (event, deltaX: number, deltaY: number) => {
     // then CSS translateY within the window — so deltaY here is always within allowed range
     win.setPosition(Math.round(x + deltaX), Math.round(y + deltaY))
     lastWindowBounds = win.getBounds()
+    anchorBottom = lastWindowBounds.y + lastWindowBounds.height
   }
 })
 
