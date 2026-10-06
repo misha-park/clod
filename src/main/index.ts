@@ -12,6 +12,7 @@ import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 import { registerOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
+import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, windowSizeFor } from '../shared/layout'
 import { readSessionMeta, updateSessionMeta, searchSessions, transcriptPath, transcriptToMarkdown } from './sessions'
 
 const DEBUG_MODE = process.env.CLOD_DEBUG === '1'
@@ -66,8 +67,10 @@ const controlPlane = new ControlPlane()
 
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
-const BAR_WIDTH = 1040
-const PILL_HEIGHT = 720  // Fixed native window height — extra room for expanded UI + shadow buffers
+// Native window size: sized around the card (see shared/layout.ts) so a
+// user-resized overlay fits. Updated by the renderer via SET_WINDOW_SIZE.
+let windowWidth = BASE_WINDOW_WIDTH
+let windowHeight = BASE_WINDOW_HEIGHT
 // Gap between the work-area bottom and the window bottom. The input sits ~10px
 // above the window bottom, so the visible gap ≈ 16px, matching the right inset.
 const PILL_BOTTOM_MARGIN = 6
@@ -87,8 +90,8 @@ let registeredAccelerator: string | null = null
 
 /** X coordinate for the window given the current position preference. */
 function computeWindowX(dx: number, sw: number): number {
-  if (windowPosition === 'right') return dx + sw - BAR_WIDTH
-  return dx + Math.round((sw - BAR_WIDTH) / 2)
+  if (windowPosition === 'right') return dx + sw - windowWidth
+  return dx + Math.round((sw - windowWidth) / 2)
 }
 
 // ─── Broadcast to renderer ───
@@ -155,12 +158,21 @@ function createWindow(): void {
   const { width: screenWidth, height: screenHeight } = display.workAreaSize
   const { x: dx, y: dy } = display.workArea
 
+  // Start at the size the saved overlay needs, so it doesn't resize after load.
+  const s = getSettings()
+  const initial = windowSizeFor(
+    overlaySize(s.expandedUI !== false, s.overlayWidth as number | null, s.overlayHeight as number | null),
+    screenWidth, screenHeight,
+  )
+  windowWidth = initial.width
+  windowHeight = initial.height
+
   const x = computeWindowX(dx, screenWidth)
-  const y = dy + screenHeight - PILL_HEIGHT - PILL_BOTTOM_MARGIN
+  const y = dy + screenHeight - windowHeight - PILL_BOTTOM_MARGIN
 
   mainWindow = new BrowserWindow({
-    width: BAR_WIDTH,
-    height: PILL_HEIGHT,
+    width: windowWidth,
+    height: windowHeight,
     x,
     y,
     ...(process.platform === 'darwin' ? { type: 'panel' as const } : {}),  // NSPanel — non-activating, joins all spaces
@@ -297,9 +309,9 @@ function resetWindowPosition(): void {
 
   mainWindow.setBounds({
     x: computeWindowX(dx, sw),
-    y: dy + sh - PILL_HEIGHT - PILL_BOTTOM_MARGIN,
-    width: BAR_WIDTH,
-    height: PILL_HEIGHT,
+    y: dy + sh - windowHeight - PILL_BOTTOM_MARGIN,
+    width: windowWidth,
+    height: windowHeight,
   })
   lastWindowBounds = mainWindow.getBounds()
 }
@@ -377,6 +389,24 @@ ipcMain.on(IPC.SET_IGNORE_MOUSE_EVENTS, (event, ignore: boolean, options?: { for
   if (win && !win.isDestroyed()) {
     win.setIgnoreMouseEvents(ignore, options || {})
   }
+})
+
+// Resize the native window to fit a resized overlay card. Keeps the bottom
+// edge fixed, and the right edge (right mode) or centre (centre mode), so the
+// card stays put while it grows.
+ipcMain.on(IPC.SET_WINDOW_SIZE, (event, size: { width: number; height: number }) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed()) return
+  const w = Math.round(Number(size?.width))
+  const h = Math.round(Number(size?.height))
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 200 || h < 200 || w > 10000 || h > 10000) return
+  const b = win.getBounds()
+  if (b.width === w && b.height === h) return
+  windowWidth = w
+  windowHeight = h
+  const x = windowPosition === 'right' ? b.x + b.width - w : Math.round(b.x + b.width / 2 - w / 2)
+  win.setBounds({ x, y: b.y + b.height - h, width: w, height: h })
+  lastWindowBounds = win.getBounds()
 })
 
 // Manual window drag — works reliably with frameless + setIgnoreMouseEvents

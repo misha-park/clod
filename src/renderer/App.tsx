@@ -10,8 +10,10 @@ import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useFolderDrop } from './hooks/useFolderDrop'
+import { ResizeHandles } from './components/ResizeHandles'
+import { overlaySize, windowSizeFor } from '../shared/layout'
 import { useSessionStore } from './stores/sessionStore'
-import { useColors, useThemeStore, spacing } from './theme'
+import { useColors, useThemeStore } from './theme'
 
 const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
 
@@ -22,6 +24,11 @@ export default function App() {
   const colors = useColors()
   const setSystemTheme = useThemeStore((s) => s.setSystemTheme)
   const expandedUI = useThemeStore((s) => s.expandedUI)
+  const overlayWidth = useThemeStore((s) => s.overlayWidth)
+  const overlayHeight = useThemeStore((s) => s.overlayHeight)
+  // While the user drags a resize handle: no size animations, no click-through.
+  const [resizing, setResizing] = useState(false)
+  const resizingRef = useRef(false)
   const windowPosition = useThemeStore((s) => s.windowPosition)
   const borderAnimation = useThemeStore((s) => s.borderAnimation)
   const [inputFocused, setInputFocused] = useState(false)
@@ -91,8 +98,8 @@ export default function App() {
     let lastIgnored: boolean | null = null
 
     const onMouseMove = (e: MouseEvent) => {
-      // While dragging, keep full mouse capture — don't toggle ignore-events
-      if (dragRef.current) return
+      // While dragging or resizing, keep full mouse capture — don't toggle ignore-events
+      if (dragRef.current || resizingRef.current) return
       const el = document.elementFromPoint(e.clientX, e.clientY)
       const isUI = !!(el && el.closest('[data-clod-ui]'))
       const shouldIgnore = !isUI
@@ -107,7 +114,7 @@ export default function App() {
     }
 
     const onMouseLeave = () => {
-      if (dragRef.current) return
+      if (dragRef.current || resizingRef.current) return
       if (lastIgnored !== true) {
         lastIgnored = true
         window.clod.setIgnoreMouseEvents(true, { forward: true })
@@ -139,7 +146,7 @@ export default function App() {
     const onMouseDown = (e: MouseEvent) => {
       const el = e.target as HTMLElement
       // Skip interactive elements — everything else on the card is draggable
-      if (el.closest('button, input, textarea, a, select, [role="button"], [contenteditable], .cm-editor')) return
+      if (el.closest('button, input, textarea, a, select, [role="button"], [contenteditable], .cm-editor, [data-resize-handle]')) return
       if (!el.closest('[data-clod-ui]')) return
       e.preventDefault()
       // Double-click: snap back to default position
@@ -152,6 +159,8 @@ export default function App() {
       }
       // Ensure full mouse capture for the duration of the drag
       window.clod.setIgnoreMouseEvents(false)
+      // The window height varies with the overlay size, so read where it really is.
+      windowYRef.current = window.screenY
       dragRef.current = { startX: e.screenX, startY: e.screenY }
     }
 
@@ -213,12 +222,19 @@ export default function App() {
   const isExpanded = useSessionStore((s) => s.isExpanded)
   const marketplaceOpen = useSessionStore((s) => s.marketplaceOpen)
 
-  // Layout dimensions — expandedUI widens and heightens the panel
-  const contentWidth = expandedUI ? 700 : spacing.contentWidth
-  const cardExpandedWidth = expandedUI ? 700 : 460
-  const cardCollapsedWidth = expandedUI ? 670 : 430
-  const cardCollapsedMargin = expandedUI ? 15 : 15
-  const bodyMaxHeight = expandedUI ? 520 : 400
+  // Layout dimensions — narrow/wide preset, or the user's resized size
+  const size = overlaySize(expandedUI, overlayWidth, overlayHeight)
+  const contentWidth = size.cardWidth
+  const cardExpandedWidth = size.cardWidth
+  const cardCollapsedWidth = size.cardWidth - 30
+  const cardCollapsedMargin = 15
+  const bodyMaxHeight = size.conversationHeight + 64
+
+  // Keep the transparent native window big enough for the card.
+  useEffect(() => {
+    const w = windowSizeFor(size, window.screen.availWidth, window.screen.availHeight)
+    window.clod.setWindowSize?.(w.width, w.height)
+  }, [size.cardWidth, size.conversationHeight])
 
   return (
     <PopoverLayerProvider>
@@ -234,7 +250,7 @@ export default function App() {
       >
 
         {/* ─── content column. Circles overflow left. ─── */}
-        <div style={{ width: contentWidth, position: 'relative', margin: windowPosition === 'right' ? '0' : '0 auto', transition: 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)', transform: 'translateY(var(--clod-card-y, 0px))' }}>
+        <div style={{ width: contentWidth, position: 'relative', margin: windowPosition === 'right' ? '0' : '0 auto', transition: resizing ? 'none' : 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)', transform: 'translateY(var(--clod-card-y, 0px))' }}>
 
           <AnimatePresence initial={false}>
             {marketplaceOpen && (
@@ -294,7 +310,7 @@ export default function App() {
               borderBottomLeftRadius: isExpanded ? 20 : 0,
               borderBottomRightRadius: isExpanded ? 20 : 0,
             }}
-            transition={TRANSITION}
+            transition={resizing ? { duration: 0 } : TRANSITION}
             style={{
               borderWidth: 1,
               borderStyle: 'solid',
@@ -318,6 +334,12 @@ export default function App() {
                 Drop a folder to work in it
               </div>
             )}
+            <ResizeHandles
+              anchor={windowPosition === 'right' ? 'right' : 'center'}
+              canResizeHeight={isExpanded}
+              onStart={() => { resizingRef.current = true; setResizing(true); window.clod.setIgnoreMouseEvents(false) }}
+              onEnd={() => { resizingRef.current = false; setResizing(false) }}
+            />
             {/* Tab strip — always mounted */}
             <div className="no-drag">
               <TabStrip />
@@ -330,7 +352,7 @@ export default function App() {
                 height: isExpanded ? 'auto' : 0,
                 opacity: isExpanded ? 1 : 0,
               }}
-              transition={TRANSITION}
+              transition={resizing ? { duration: 0 } : TRANSITION}
               className="overflow-hidden no-drag"
             >
               <div style={{ maxHeight: bodyMaxHeight }}>

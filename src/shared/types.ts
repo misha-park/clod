@@ -377,6 +377,7 @@ export const IPC = {
   START_WINDOW_DRAG: 'clod:start-window-drag',
   RESET_WINDOW_POSITION: 'clod:reset-window-position',
   SET_WINDOW_POSITION: 'clod:set-window-position',
+  SET_WINDOW_SIZE: 'clod:set-window-size',
   IS_VISIBLE: 'clod:is-visible',
 
   // Skill provisioning (main → renderer)

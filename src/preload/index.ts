@@ -56,6 +56,7 @@ export interface ClodAPI {
   onWindowShown(callback: () => void): () => void
   onCursorPoint(callback: (point: { x: number; y: number } | null) => void): () => void
   getPathForFile(file: File): string
+  setWindowSize(width: number, height: number): void
   getSettingsSync(): { settings: Record<string, unknown>; existed: boolean }
   saveSettings(partial: Record<string, unknown>): void
   onSettingsChanged(callback: (settings: Record<string, unknown>) => void): () => void
@@ -157,6 +158,7 @@ const api: ClodAPI = {
   // File.path was removed in Electron 32; this is the supported replacement.
   getPathForFile: (file) => webUtils.getPathForFile(file),
 
+  setWindowSize: (width, height) => ipcRenderer.send(IPC.SET_WINDOW_SIZE, { width, height }),
   getSettingsSync: () => ipcRenderer.sendSync(IPC.SETTINGS_GET_SYNC),
   saveSettings: (partial) => ipcRenderer.send(IPC.SETTINGS_SAVE, partial),
   onSettingsChanged: (callback) => {

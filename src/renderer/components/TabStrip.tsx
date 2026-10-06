@@ -165,9 +165,10 @@ export function TabStrip() {
 
         <button
           onClick={() => setExpandedUI(!expandedUI)}
+          onDoubleClick={() => useThemeStore.getState().resetOverlaySize()}
           className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
           style={{ color: expandedUI ? colors.accent : colors.textTertiary }}
-          title={expandedUI ? 'Switch to narrow view' : 'Switch to wide view'}
+          title={`${expandedUI ? 'Switch to narrow view' : 'Switch to wide view'} · double-click to reset size`}
           aria-label="Toggle wide/narrow view"
         >
           <ArrowsOutLineHorizontal size={14} />

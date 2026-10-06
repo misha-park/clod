@@ -301,6 +301,9 @@ interface ThemeState {
   hotkeyAccelerator: string
   /** Launch Clod automatically at login */
   openAtLogin: boolean
+  /** User-resized card width / conversation height (null = narrow/wide preset) */
+  overlayWidth: number | null
+  overlayHeight: number | null
   /** OS-reported dark mode — used when themeMode is 'system' */
   _systemIsDark: boolean
   setIsDark: (isDark: boolean) => void
@@ -312,6 +315,10 @@ interface ThemeState {
   setBorderAnimation: (on: boolean) => void
   setHotkey: (mode: HotkeyMode, accelerator: string) => void
   setOpenAtLogin: (on: boolean) => void
+  /** Set a custom overlay size; pass persist=false while dragging, true on release. */
+  setOverlaySize: (width: number | null, height: number | null, persist?: boolean) => void
+  /** Back to the narrow preset at the default height. */
+  resetOverlaySize: () => void
   /** Called by OS theme change listener — updates system value */
   setSystemTheme: (isDark: boolean) => void
 }
@@ -347,6 +354,8 @@ interface PersistedSettings {
   hotkeyMode: HotkeyMode
   hotkeyAccelerator: string
   openAtLogin: boolean
+  overlayWidth: number | null
+  overlayHeight: number | null
 }
 
 const DEFAULT_SETTINGS: PersistedSettings = {
@@ -359,6 +368,8 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   hotkeyMode: 'double-option',
   hotkeyAccelerator: '',
   openAtLogin: true,
+  overlayWidth: null,
+  overlayHeight: null,
 }
 
 function validateSettings(p: Record<string, any>): PersistedSettings {
@@ -374,6 +385,8 @@ function validateSettings(p: Record<string, any>): PersistedSettings {
         hotkeyMode: p.hotkeyMode === 'accelerator' ? 'accelerator' : 'double-option',
         hotkeyAccelerator: typeof p.hotkeyAccelerator === 'string' ? p.hotkeyAccelerator : '',
         openAtLogin: typeof p.openAtLogin === 'boolean' ? p.openAtLogin : true,
+        overlayWidth: typeof p.overlayWidth === 'number' && p.overlayWidth > 0 ? Math.round(p.overlayWidth) : null,
+        overlayHeight: typeof p.overlayHeight === 'number' && p.overlayHeight > 0 ? Math.round(p.overlayHeight) : null,
       }
     }
   } catch {}
@@ -405,6 +418,8 @@ export const useThemeStore = create<ThemeState>((set, get) => {
       hotkeyMode: s.hotkeyMode,
       hotkeyAccelerator: s.hotkeyAccelerator,
       openAtLogin: s.openAtLogin,
+      overlayWidth: s.overlayWidth,
+      overlayHeight: s.overlayHeight,
     })
   }
 
@@ -419,6 +434,8 @@ export const useThemeStore = create<ThemeState>((set, get) => {
     hotkeyMode: saved.hotkeyMode,
     hotkeyAccelerator: saved.hotkeyAccelerator,
     openAtLogin: saved.openAtLogin,
+    overlayWidth: saved.overlayWidth,
+    overlayHeight: saved.overlayHeight,
     _systemIsDark: true,
     setIsDark: (isDark) => {
       set({ isDark })
@@ -435,7 +452,16 @@ export const useThemeStore = create<ThemeState>((set, get) => {
       persist()
     },
     setExpandedUI: (expanded) => {
-      set({ expandedUI: expanded })
+      // Switching narrow/wide drops a custom width so the preset takes effect.
+      set({ expandedUI: expanded, overlayWidth: null })
+      persist()
+    },
+    setOverlaySize: (width, height, persistNow = true) => {
+      set({ overlayWidth: width, overlayHeight: height })
+      if (persistNow) persist()
+    },
+    resetOverlaySize: () => {
+      set({ expandedUI: false, overlayWidth: null, overlayHeight: null })
       persist()
     },
     setWindowPosition: (pos) => {
@@ -487,6 +513,9 @@ onExternalSettingsChange((raw) => {
   if (next.themeMode !== s.themeMode) s.setThemeMode(next.themeMode)
   if (next.soundEnabled !== s.soundEnabled) s.setSoundEnabled(next.soundEnabled)
   if (next.expandedUI !== s.expandedUI) s.setExpandedUI(next.expandedUI)
+  if (next.overlayWidth !== s.overlayWidth || next.overlayHeight !== s.overlayHeight) {
+    s.setOverlaySize(next.overlayWidth, next.overlayHeight)
+  }
   if (next.windowPosition !== s.windowPosition) s.setWindowPosition(next.windowPosition)
   if (next.inputPlaceholder !== s.inputPlaceholder) s.setInputPlaceholder(next.inputPlaceholder)
   if (next.borderAnimation !== s.borderAnimation) s.setBorderAnimation(next.borderAnimation)

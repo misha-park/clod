@@ -14,6 +14,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { useColors, useThemeStore } from '../theme'
+import { overlaySize } from '../../shared/layout'
 import type { Message } from '../../shared/types'
 
 // ─── Constants ───
@@ -72,6 +73,10 @@ export function ConversationView() {
   const prevTabIdRef = useRef(activeTabId)
   const colors = useColors()
   const expandedUI = useThemeStore((s) => s.expandedUI)
+  const overlayWidth = useThemeStore((s) => s.overlayWidth)
+  const overlayHeight = useThemeStore((s) => s.overlayHeight)
+  // Custom (resized) height is fixed so dragging the top edge always shows; presets stay max-heights.
+  const convSize = overlaySize(expandedUI, overlayWidth, overlayHeight)
 
   const tab = tabs.find((t) => t.id === activeTabId)
 
@@ -151,7 +156,7 @@ export function ConversationView() {
       <div
         ref={scrollRef}
         className="overflow-y-auto overflow-x-hidden px-4 pt-2 conversation-selectable"
-        style={{ maxHeight: expandedUI ? 460 : 336, paddingBottom: 28 }}
+        style={{ ...(convSize.customHeight ? { height: convSize.conversationHeight } : { maxHeight: convSize.conversationHeight }), paddingBottom: 28 }}
         onScroll={handleScroll}
       >
         {/* Load older button */}
