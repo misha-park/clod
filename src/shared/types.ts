@@ -285,6 +285,13 @@ export interface SessionMeta {
   firstMessage: string | null
   lastTimestamp: string
   size: number
+  /** Custom name set in Clod */
+  title?: string | null
+  pinned?: boolean
+  /** Folder the session ran in (set by search, which can span folders) */
+  projectPath?: string
+  /** Text around a search match */
+  snippet?: string | null
 }
 
 export interface SessionLoadMessage {
@@ -334,6 +341,9 @@ export const IPC = {
   LIST_SESSIONS: 'clod:list-sessions',
   LOAD_SESSION: 'clod:load-session',
   DELETE_SESSION: 'clod:delete-session',
+  SEARCH_SESSIONS: 'clod:search-sessions',
+  SET_SESSION_META: 'clod:set-session-meta',
+  EXPORT_SESSION: 'clod:export-session',
 
   // One-way events (main → renderer)
   TEXT_CHUNK: 'clod:text-chunk',

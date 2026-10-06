@@ -12,6 +12,7 @@ import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 import { registerOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
+import { readSessionMeta, updateSessionMeta, searchSessions, transcriptPath, transcriptToMarkdown } from './sessions'
 
 const DEBUG_MODE = process.env.CLOD_DEBUG === '1'
 const SPACES_DEBUG = DEBUG_MODE || process.env.CLOD_SPACES_DEBUG === '1'
@@ -553,6 +554,7 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
       return []
     }
     const files = readdirSync(sessionsDir).filter((f: string) => f.endsWith('.jsonl'))
+    const userMeta = readSessionMeta()
 
     const sessions: Array<{ sessionId: string; slug: string | null; firstMessage: string | null; lastTimestamp: string; size: number }> = []
 
@@ -568,10 +570,11 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
       const stat = statSync(filePath)
       if (stat.size < 100) continue // skip trivially small files
 
-      // Retention: delete sessions older than 2 weeks. Note these transcripts
-      // belong to the claude CLI, so this also removes them from other clients.
+      // Retention: delete sessions older than 2 weeks, except pinned ones. Note
+      // these transcripts belong to the claude CLI, so this also removes them
+      // from other clients.
       const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000
-      if (stat.mtimeMs < Date.now() - TWO_WEEKS_MS) {
+      if (stat.mtimeMs < Date.now() - TWO_WEEKS_MS && !userMeta[fileSessionId]?.pinned) {
         try { unlinkSync(filePath) } catch {}
         continue
       }
@@ -618,9 +621,14 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
       }
     }
 
-    // Sort by last timestamp, most recent first
-    sessions.sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime())
-    return sessions.slice(0, 20) // Return top 20
+    // Pinned first, then most recent; always include every pinned session.
+    const withMeta = sessions.map((s) => ({
+      ...s, title: userMeta[s.sessionId]?.title ?? null, pinned: !!userMeta[s.sessionId]?.pinned, projectPath: cwd,
+    }))
+    withMeta.sort((a, b) => Number(b.pinned) - Number(a.pinned)
+      || new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime())
+    const pinnedCount = withMeta.filter((s) => s.pinned).length
+    return withMeta.slice(0, Math.max(20, pinnedCount + 10))
   } catch (err) {
     log(`LIST_SESSIONS error: ${err}`)
     return []
@@ -658,6 +666,54 @@ ipcMain.handle(IPC.DELETE_SESSION, (_e, arg: { sessionId: string; projectPath?: 
 })
 
 // Load conversation history from a session's JSONL file
+// Search transcripts (this folder, or every folder when projectPath is null).
+ipcMain.handle(IPC.SEARCH_SESSIONS, async (_e, arg: { query: string; projectPath: string | null }) => {
+  const query = typeof arg?.query === 'string' ? arg.query.slice(0, 200) : ''
+  const projectPath = typeof arg?.projectPath === 'string' ? arg.projectPath : null
+  log(`IPC SEARCH_SESSIONS ${projectPath ? `(path=${projectPath})` : '(all folders)'} q=${query.length} chars`)
+  try {
+    const meta = readSessionMeta()
+    const q = query.trim().toLowerCase()
+    const results = (await searchSessions(query, projectPath)).map((r) => ({
+      ...r, title: meta[r.sessionId]?.title ?? null, pinned: !!meta[r.sessionId]?.pinned,
+    }))
+    // A name match ranks with content matches; pinned sessions first.
+    return results
+      .filter((r) => !q || r.snippet || r.title?.toLowerCase().includes(q))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+  } catch (err) {
+    log(`SEARCH_SESSIONS error: ${err}`)
+    return []
+  }
+})
+
+ipcMain.handle(IPC.SET_SESSION_META, (_e, arg: { sessionId: string; title?: string | null; pinned?: boolean }) => {
+  if (!arg || typeof arg.sessionId !== 'string') return false
+  const patch: { title?: string; pinned?: boolean } = {}
+  if ('title' in arg) patch.title = typeof arg.title === 'string' ? arg.title.trim().slice(0, 120) : ''
+  if ('pinned' in arg) patch.pinned = !!arg.pinned
+  return updateSessionMeta(arg.sessionId, patch)
+})
+
+// Export a transcript to Markdown via a Save dialog. Returns the saved path.
+ipcMain.handle(IPC.EXPORT_SESSION, async (_e, arg: { sessionId: string; projectPath: string; title: string }) => {
+  const filePath = arg && transcriptPath(arg.sessionId, arg.projectPath)
+  if (!filePath || !existsSync(filePath)) return null
+  const title = (typeof arg.title === 'string' && arg.title.trim()) || 'Clod session'
+  const safeName = title.replace(/[\/:*?"<>|\n\r]+/g, ' ').trim().slice(0, 80) || 'Clod session'
+  if (process.platform === 'darwin') app.focus()
+  const { canceled, filePath: target } = await dialog.showSaveDialog({
+    defaultPath: join(homedir(), 'Downloads', `${safeName}.md`),
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+  })
+  if (canceled || !target) return null
+  const { writeFileSync } = require('fs')
+  writeFileSync(target, await transcriptToMarkdown(filePath, title, arg.projectPath))
+  log(`Exported session ${arg.sessionId} → ${target}`)
+  shell.showItemInFolder(target)
+  return target
+})
+
 ipcMain.handle(IPC.LOAD_SESSION, async (_e, arg: { sessionId: string; projectPath?: string } | string) => {
   const sessionId = typeof arg === 'string' ? arg : arg.sessionId
   const projectPath = typeof arg === 'string' ? undefined : arg.projectPath
