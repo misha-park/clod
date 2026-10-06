@@ -22,6 +22,7 @@ export interface ClodAPI {
   loadSession(sessionId: string, projectPath?: string): Promise<SessionLoadMessage[]>
   deleteSession(sessionId: string, projectPath?: string): Promise<boolean>
   searchSessions(query: string, projectPath: string | null): Promise<SessionMeta[]>
+  runShell(command: string, cwd: string): Promise<{ output: string; exitCode: number; truncated: boolean; timedOut: boolean }>
   setSessionMeta(sessionId: string, patch: { title?: string | null; pinned?: boolean }): Promise<boolean>
   exportSession(sessionId: string, projectPath: string, title: string): Promise<string | null>
   fetchMarketplace(forceRefresh?: boolean): Promise<{ plugins: CatalogPlugin[]; error: string | null }>
@@ -83,6 +84,7 @@ const api: ClodAPI = {
   loadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke(IPC.LOAD_SESSION, { sessionId, projectPath }),
   deleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke(IPC.DELETE_SESSION, { sessionId, projectPath }),
   searchSessions: (query, projectPath) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, { query, projectPath }),
+  runShell: (command, cwd) => ipcRenderer.invoke(IPC.RUN_SHELL, { command, cwd }),
   setSessionMeta: (sessionId, patch) => ipcRenderer.invoke(IPC.SET_SESSION_META, { sessionId, ...patch }),
   exportSession: (sessionId, projectPath, title) => ipcRenderer.invoke(IPC.EXPORT_SESSION, { sessionId, projectPath, title }),
   fetchMarketplace: (forceRefresh) => ipcRenderer.invoke(IPC.MARKETPLACE_FETCH, { forceRefresh }),

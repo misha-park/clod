@@ -914,7 +914,15 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
   const isError = message.content.startsWith('Error:') || message.content.includes('unexpectedly')
   const colors = useColors()
 
-  const inner = (
+  const inner = message.shell ? (
+    // Output of a `!` command: monospaced, scrollable, full width.
+    <div
+      className="text-[11px] leading-[1.45] px-2.5 py-1.5 rounded-lg whitespace-pre-wrap font-mono overflow-y-auto"
+      style={{ background: colors.surfaceHover, color: colors.textSecondary, maxHeight: 220 }}
+    >
+      {message.content}
+    </div>
+  ) : (
     <div
       className="text-[11px] leading-[1.5] px-2.5 py-1 rounded-lg inline-block whitespace-pre-wrap"
       style={{

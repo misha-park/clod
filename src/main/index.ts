@@ -666,6 +666,43 @@ ipcMain.handle(IPC.DELETE_SESSION, (_e, arg: { sessionId: string; projectPath?: 
 })
 
 // Load conversation history from a session's JSONL file
+// Run a `!` command typed in the input bar, in the tab's folder. Only ever
+// invoked from the user's own input. Non-interactive login shell: the user's
+// PATH applies, but interactive rc output (e.g. neofetch) does not.
+ipcMain.handle(IPC.RUN_SHELL, async (_e, arg: { command: string; cwd: string }) => {
+  const command = typeof arg?.command === 'string' ? arg.command : ''
+  const cwd = typeof arg?.cwd === 'string' ? arg.cwd.replace(/^~(?=$|\/)/, homedir()) : ''
+  if (!command.trim()) return { output: '', exitCode: 1, truncated: false, timedOut: false }
+  if (/\0/.test(cwd) || !cwd.startsWith('/') || !existsSync(cwd)) {
+    return { output: `Folder not found: ${cwd}`, exitCode: 1, truncated: false, timedOut: false }
+  }
+  log(`IPC RUN_SHELL in ${cwd} (${command.length} chars)`)
+  const MAX = 64 * 1024
+  const { spawn } = require('child_process')
+  return await new Promise((resolve) => {
+    let output = ''
+    let truncated = false
+    let timedOut = false
+    const child = spawn('/bin/zsh', ['-lc', command], { cwd, env: getCliEnv() })
+    const take = (chunk: Buffer) => {
+      if (output.length >= MAX) { truncated = true; return }
+      output += chunk.toString('utf-8')
+      if (output.length > MAX) { output = output.slice(0, MAX); truncated = true }
+    }
+    child.stdout.on('data', take)
+    child.stderr.on('data', take)
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 60_000)
+    child.on('error', (err: Error) => {
+      clearTimeout(timer)
+      resolve({ output: err.message, exitCode: 1, truncated, timedOut })
+    })
+    child.on('close', (code: number | null) => {
+      clearTimeout(timer)
+      resolve({ output, exitCode: code ?? 1, truncated, timedOut })
+    })
+  })
+})
+
 // Search transcripts (this folder, or every folder when projectPath is null).
 ipcMain.handle(IPC.SEARCH_SESSIONS, async (_e, arg: { query: string; projectPath: string | null }) => {
   const query = typeof arg?.query === 'string' ? arg.query.slice(0, 200) : ''

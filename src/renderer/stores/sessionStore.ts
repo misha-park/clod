@@ -196,6 +196,8 @@ interface State {
   buildYourOwn: () => void
   resumeSession: (sessionId: string, title?: string, projectPath?: string) => Promise<string>
   addSystemMessage: (content: string) => void
+  /** Run a `!` command in the tab's folder; its output joins the next message to Claude. */
+  runShellCommand: (command: string) => Promise<void>
   sendMessage: (prompt: string, projectPath?: string) => void
   respondPermission: (tabId: string, questionId: string, optionId: string) => void
   addDirectory: (dir: string) => void
@@ -247,6 +249,7 @@ function makeLocalTab(): TabState {
     sessionSkills: [],
     sessionVersion: null,
     queuedPrompts: [],
+    pendingShellOutputs: [],
     workingDirectory: '~',
     hasChosenDirectory: false,
     additionalDirs: [],
@@ -666,6 +669,43 @@ export const useSessionStore = create<State>((set, get) => ({
 
   // ─── Send ───
 
+  runShellCommand: async (command) => {
+    const { activeTabId, tabs, staticInfo, defaultDirOverride } = get()
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab || !command.trim()) return
+    const cwd = tab.hasChosenDirectory
+      ? tab.workingDirectory
+      : (defaultDirOverride || staticInfo?.defaultDir || staticInfo?.homePath || tab.workingDirectory || '~')
+    const tabId = tab.id
+    const pushMessage = (msg: Message) => set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, messages: [...t.messages, msg] } : t)),
+    }))
+    pushMessage({ id: nextMsgId(), role: 'user', content: `!${command}`, timestamp: Date.now() })
+
+    let result: { output: string; exitCode: number; truncated: boolean; timedOut: boolean }
+    try {
+      result = await window.clod.runShell(command, cwd)
+    } catch (err) {
+      result = { output: String(err), exitCode: 1, truncated: false, timedOut: false }
+    }
+    const output = result.output.replace(/\s+$/, '')
+    const notes = [
+      result.timedOut ? 'stopped after 60 s' : null,
+      result.truncated ? 'output truncated to 64 KB' : null,
+      result.exitCode !== 0 ? `exit code ${result.exitCode}` : null,
+    ].filter(Boolean).join(' · ')
+    const shown = `$ ${command}\n${output || '(no output)'}${notes ? `\n— ${notes}` : ''}`
+    pushMessage({ id: nextMsgId(), role: 'system', content: shown, timestamp: Date.now(), shell: true })
+
+    // Kept for the next message so Claude can see what the command printed.
+    const forClaude = `I ran \`${command}\` in ${cwd}${notes ? ` (${notes})` : ''}. Output:\n\`\`\`\n${output || '(no output)'}\n\`\`\``
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId
+        ? { ...t, pendingShellOutputs: [...t.pendingShellOutputs, forClaude] }
+        : t)),
+    }))
+  },
+
   sendMessage: (prompt, projectPath) => {
     const { activeTabId, tabs, staticInfo, defaultDirOverride } = get()
     const tab = tabs.find((t) => t.id === activeTabId)
@@ -707,6 +747,10 @@ export const useSessionStore = create<State>((set, get) => ({
     if (fileNotes.length > 0) {
       fullPrompt = `${fileNotes.join('\n')}\n\n${prompt}`
     }
+    // Attach the output of any `!` commands run since the last message.
+    if (tab.pendingShellOutputs.length > 0) {
+      fullPrompt = `${tab.pendingShellOutputs.join('\n\n')}\n\n${fullPrompt}`
+    }
 
     const title = tab.messages.length === 0
       ? (prompt.length > 30 ? prompt.substring(0, 27) + '...' : prompt)
@@ -731,6 +775,7 @@ export const useSessionStore = create<State>((set, get) => ({
             ...withEffectiveBase,
             title,
             attachments: [],
+            pendingShellOutputs: [],
             queuedPrompts: [...withEffectiveBase.queuedPrompts, prompt],
           }
         }
@@ -741,6 +786,7 @@ export const useSessionStore = create<State>((set, get) => ({
           currentActivity: 'Starting...',
           title,
           attachments: [],
+          pendingShellOutputs: [],
           messages: [
             ...withEffectiveBase.messages,
             { id: nextMsgId(), role: 'user' as const, content: prompt, timestamp: Date.now() },

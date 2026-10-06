@@ -26,6 +26,7 @@ export function InputBar() {
   const measureRef = useRef<HTMLTextAreaElement | null>(null)
 
   const sendMessage = useSessionStore((s) => s.sendMessage)
+  const runShellCommand = useSessionStore((s) => s.runShellCommand)
   const clearTab = useSessionStore((s) => s.clearTab)
   const addSystemMessage = useSessionStore((s) => s.addSystemMessage)
   const addAttachments = useSessionStore((s) => s.addAttachments)
@@ -268,8 +269,17 @@ export function InputBar() {
       } else {
         setInput('')
         setSlashFilter(null)
-        addSystemMessage(`Unknown model "${modelMatch[1]}". Available: opus, sonnet, haiku`)
+        addSystemMessage(`Unknown model "${modelMatch[1]}". Available: fable, opus, sonnet, haiku`)
       }
+      return
+    }
+    // `!command` runs locally; its output is attached to the next message.
+    if (prompt.startsWith('!') && prompt.length > 1 && attachments.length === 0) {
+      setInput('')
+      setSlashFilter(null)
+      if (textareaRef.current) textareaRef.current.style.height = `${INPUT_MIN_HEIGHT}px`
+      void runShellCommand(prompt.slice(1).trim())
+      requestAnimationFrame(() => textareaRef.current?.focus())
       return
     }
     if (!prompt && attachments.length === 0) return
@@ -282,7 +292,7 @@ export function InputBar() {
     sendMessage(prompt || 'See attached files')
     // Refocus after React re-renders from the state update
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect])
+  }, [input, isBusy, sendMessage, runShellCommand, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect])
 
   // ─── Keyboard ───
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -164,6 +164,8 @@ export interface TabState {
   sessionVersion: string | null
   /** Prompts waiting behind the current run (display text only) */
   queuedPrompts: string[]
+  /** Output of `!` commands, attached to the next message sent to Claude */
+  pendingShellOutputs: string[]
   /** Working directory for this tab's Claude sessions */
   workingDirectory: string
   /** Whether the user explicitly chose a directory (vs. using default home) */
@@ -180,6 +182,8 @@ export interface Message {
   toolInput?: string
   toolStatus?: 'running' | 'completed' | 'error'
   timestamp: number
+  /** Output of a `!` shell command, rendered as a monospaced block */
+  shell?: boolean
 }
 
 export interface RunResult {
@@ -343,6 +347,7 @@ export const IPC = {
   DELETE_SESSION: 'clod:delete-session',
   SEARCH_SESSIONS: 'clod:search-sessions',
   SET_SESSION_META: 'clod:set-session-meta',
+  RUN_SHELL: 'clod:run-shell',
   EXPORT_SESSION: 'clod:export-session',
 
   // One-way events (main → renderer)
