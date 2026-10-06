@@ -35,6 +35,29 @@ Open the `clod` folder in Finder and double-click **`install-app.command`**. It 
 
 Then launch **Clod** from your Applications folder or Spotlight.
 
+### Keeping permissions across reinstalls
+
+macOS ties Accessibility and Screen Recording grants to an app's signature. An
+ad-hoc signed build gets a new signature every time, so macOS forgets the grants
+and the double-tap hotkey stops working (the old entry still looks enabled in
+System Settings). To avoid this, create a local signing certificate once:
+
+1. Open **Keychain Access** → **Certificate Assistant** → **Create a Certificate…**
+2. Name: `Clod Local Signing` · Identity Type: **Self-Signed Root** · Certificate Type: **Code Signing**
+3. Click **Create**.
+
+`install-app.command` signs Clod with it automatically when it exists (allow
+`codesign` to use the key when prompted). The certificate is valid for one year;
+create a new one with the same name when it expires.
+
+If permissions get out of sync anyway, reset them and re-approve on next launch:
+
+```bash
+tccutil reset Accessibility com.clod.app && tccutil reset ScreenCapture com.clod.app
+```
+
+Then quit and reopen Clod so the hotkey picks up the grant.
+
 ## Run from source (development)
 
 ```bash
