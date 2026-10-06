@@ -9,7 +9,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync } from 'fs'
-import { join, dirname } from 'path'
+import { join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { randomUUID } from 'crypto'

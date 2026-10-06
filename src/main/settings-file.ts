@@ -16,8 +16,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSyn
 export type SettingsObject = Record<string, unknown>
 
 const DIR = join(app.getPath('appData'), 'Clod')
-export const SETTINGS_PATH = join(DIR, 'settings.json')
-export const STATE_PATH = join(DIR, 'state.json')
+const SETTINGS_PATH = join(DIR, 'settings.json')
+const STATE_PATH = join(DIR, 'state.json')
 
 function ensureDir(): void {
   if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true })

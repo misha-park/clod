@@ -140,7 +140,7 @@ Theme mode state machine: `system | light | dark` with separate `_systemIsDark` 
 
 - **TabStrip** — tab bar with new tab, history picker, settings popover.
 - **ConversationView** — scrollable message timeline with markdown rendering (react-markdown + remark-gfm), tool call cards, permission cards.
-- **InputBar** — prompt input with attachment chips, voice recording, slash command menu, model picker.
+- **InputBar** — prompt input with attachment chips, slash command menu, model picker.
 - **MarketplacePanel** — plugin browser with search, semantic tag filters, install confirmation.
 
 ### Performance Patterns

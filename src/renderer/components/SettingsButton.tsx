@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { GearSix } from '@phosphor-icons/react'
 import { useColors } from '../theme'
 

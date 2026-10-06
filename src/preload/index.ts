@@ -108,11 +108,6 @@ const api: ClodAPI = {
 
   // ─── Event listeners ───
   onEvent: (callback) => {
-    const channels = [
-      IPC.TEXT_CHUNK, IPC.TOOL_CALL, IPC.TOOL_CALL_UPDATE,
-      IPC.TOOL_CALL_COMPLETE, IPC.TASK_UPDATE, IPC.TASK_COMPLETE,
-      IPC.SESSION_DEAD, IPC.SESSION_INIT, IPC.ERROR, IPC.RATE_LIMIT,
-    ]
     // Single unified handler — all normalized events come through one channel
     const handler = (_e: Electron.IpcRendererEvent, tabId: string, event: NormalizedEvent) => callback(tabId, event)
     ipcRenderer.on('clod:normalized-event', handler)

@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Terminal, CaretDown, Check, FolderOpen, Plus, X, ShieldCheck } from '@phosphor-icons/react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useSessionStore, AVAILABLE_MODELS, getModelDisplayLabel } from '../stores/sessionStore'
@@ -298,7 +298,6 @@ export function StatusBar() {
   if (!tab) return null
 
   const isRunning = tab.status === 'running' || tab.status === 'connecting'
-  const isEmpty = tab.messages.length === 0
   const hasExtraDirs = tab.additionalDirs.length > 0
 
   const handleOpenInTerminal = () => {

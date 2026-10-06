@@ -14,7 +14,7 @@ Clod is a **macOS-only Electron overlay** that wraps the Claude Code CLI (`claud
 | Install deps | `npm install` |
 | Dev mode (hot-reload) | `npm run dev` |
 | Type-check / build | `npm run build` |
-| Toggle overlay | `⌥ + Space` (fallback: `Cmd+Shift+K`) |
+| Toggle overlay | Double-tap `⌥` or a custom shortcut (fallback: `Cmd+Shift+K`) |
 | Debug logging | `CLOD_DEBUG=1 npm run dev` (writes to `~/.clod-debug.log`) |
 
 **Main process changes require full restart.** Renderer changes hot-reload.
@@ -101,7 +101,6 @@ All IPC and event types live in `src/shared/types.ts`. Key types:
 
 - Don't import main-process modules from renderer (or vice versa) — the preload bridge is the only crossing point
 - Don't add network calls — the app is designed to be nearly offline (only marketplace fetches from GitHub)
-- Don't use `node-pty` for new features — it's legacy, prefer `RunManager` (stdio-based)
 - Don't add Electron `remote` module usage — it's disabled for security
 
 ## Adding a New Feature — Checklist
@@ -141,7 +140,6 @@ All IPC and event types live in `src/shared/types.ts`. Key types:
 | Animation | Framer Motion | 12 |
 | Icons | Phosphor Icons | 2 |
 | Markdown | react-markdown + remark-gfm | 9 / 4 |
-| PTY (legacy) | node-pty | 1.1 |
 
 ## Network Surface
 
@@ -159,5 +157,5 @@ No telemetry. No analytics. No auto-update.
 2. **Adding raw color values** instead of using `useColors()` — breaks theming
 3. **Mutating tab state from renderer** instead of going through ControlPlane events
 4. **Hardcoding IPC strings** instead of using `IPC.*` constants
-5. **Testing on non-macOS** — this is macOS-only (transparent windows, node-pty bindings)
+5. **Testing on non-macOS** — this is macOS-only (transparent windows, native key hook)
 6. **Not handling the `session_dead` event** — if a Claude process crashes, the tab must transition to `dead` status

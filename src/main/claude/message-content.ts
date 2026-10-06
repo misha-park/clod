@@ -9,7 +9,7 @@ export type OutboundContentBlock =
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
 
 /** Raster formats the vision model accepts. SVG is intentionally excluded. */
-export const SUPPORTED_IMAGE_TYPES = new Set([
+const SUPPORTED_IMAGE_TYPES = new Set([
   'image/png',
   'image/jpeg',
   'image/gif',

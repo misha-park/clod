@@ -28,7 +28,6 @@
     "@phosphor-icons/react": "^2.1.10",
     "framer-motion": "^12.35.1",
     "katex": "^0.17.0",
-    "node-pty": "^1.1.0",
     "react-markdown": "^9.0.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.0",
@@ -54,9 +53,6 @@
       "icon": "resources/icon.icns",
       "entitlements": "resources/entitlements.mac.plist",
       "entitlementsInherit": "resources/entitlements.mac.plist",
-      "extendInfo": {
-        "NSMicrophoneUsageDescription": "Clod uses your microphone to transcribe voice input locally with Whisper."
-      },
       "extraFiles": [
         {
           "from": "dist-native/Clod Settings.app",

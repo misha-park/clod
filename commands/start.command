@@ -32,7 +32,7 @@ if ! npx electron-vite build --mode production; then
   exit 1
 fi
 
-echo "Clod running. ⌥ + Space to toggle. Use ./commands/stop.command or tray icon > Quit to close."
+echo "Clod running. Double-tap ⌥ (or ⌘⇧K) to toggle. Use ./commands/stop.command or tray icon > Quit to close."
 
 # Launch in a new process group and record the PID
 npx electron . &

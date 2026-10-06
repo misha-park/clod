@@ -1,6 +1,5 @@
 import { EventEmitter } from 'events'
 import { RunManager } from './run-manager'
-import { PtyRunManager } from './pty-run-manager'
 import { PermissionServer, maskSensitiveFields } from '../hooks/permission-server'
 import type { HookToolRequest, PermissionOption } from '../hooks/permission-server'
 import { log as _log } from '../logger'
@@ -10,7 +9,6 @@ import type {
   HealthReport,
   NormalizedEvent,
   RunOptions,
-  EnrichedError,
 } from '../../shared/types'
 
 const MAX_QUEUE_DEPTH = 32
@@ -60,12 +58,6 @@ export class ControlPlane extends EventEmitter {
   private inflightRequests = new Map<string, InflightRequest>()
   private requestQueue: QueuedRequest[] = []
   private runManager: RunManager
-  private ptyRunManager: PtyRunManager
-  /** Feature flag: use PTY transport for interactive permissions */
-  private interactivePty: boolean
-  /** Tracks which runs are using PTY transport (by requestId) */
-  private ptyRuns = new Set<string>()
-  /** Tracks requestIds that are warmup init requests (invisible to renderer) */
   /** Permission hook server for PreToolUse HTTP hooks */
   private permissionServer: PermissionServer
   /** Per-run tokens: requestId → runToken (for cleanup on exit/error) */
@@ -75,11 +67,9 @@ export class ControlPlane extends EventEmitter {
   /** Resolves when the permission server is ready (or failed). Dispatch awaits this. */
   private hookServerReady: Promise<void>
 
-  constructor(interactivePty = false) {
+  constructor() {
     super()
-    this.interactivePty = interactivePty
     this.runManager = new RunManager()
-    this.ptyRunManager = new PtyRunManager()
     this.permissionServer = new PermissionServer()
 
     // Start the permission hook server. _dispatch awaits hookServerReady
@@ -127,11 +117,6 @@ export class ControlPlane extends EventEmitter {
       }
       this.emit('event', tabId, permEvent)
     })
-
-    log(`Interactive PTY transport: ${interactivePty ? 'ENABLED' : 'disabled'}`)
-
-    // ─── Wire PtyRunManager events → ControlPlane routing ───
-    this._wirePtyEvents()
 
     // ─── Wire RunManager events → ControlPlane routing ───
 
@@ -238,117 +223,6 @@ export class ControlPlane extends EventEmitter {
       // Use enriched diagnostics — _finishedRuns holds the handle with
       // stderr/stdout ring buffers even after the process errored out.
       const enriched = this.runManager.getEnrichedError(requestId, null)
-      enriched.message = err.message
-      this.emit('error', tabId, enriched)
-
-      if (inflight) {
-        inflight.reject(err)
-        this.inflightRequests.delete(requestId)
-      }
-    })
-  }
-
-  /**
-   * Wire PtyRunManager events using the same routing logic as RunManager.
-   */
-  private _wirePtyEvents(): void {
-    // Normalized events → same routing as RunManager
-    this.ptyRunManager.on('normalized', (requestId: string, event: NormalizedEvent) => {
-      const tabId = this._findTabByRequest(requestId)
-      if (!tabId) return
-
-      const tab = this.tabs.get(tabId)
-      if (!tab) return
-
-      tab.lastActivityAt = Date.now()
-
-      // Handle session init
-      if (event.type === 'session_init') {
-        tab.claudeSessionId = event.sessionId
-
-        if (tab.status === 'connecting') {
-          this._setTabStatus(tabId, 'running')
-        }
-      }
-
-      this.emit('event', tabId, event)
-    })
-
-    // Exit events
-    this.ptyRunManager.on('exit', (requestId: string, code: number | null, signal: number | null, sessionId: string | null) => {
-      // Clean up per-run token
-      const runToken = this.runTokens.get(requestId)
-      if (runToken) {
-        this.permissionServer.unregisterRun(runToken)
-        this.runTokens.delete(requestId)
-      }
-
-      const tabId = this._findTabByRequest(requestId)
-      const inflight = this.inflightRequests.get(requestId)
-
-      // Clean up PTY run tracking
-      this.ptyRuns.delete(requestId)
-
-      if (!tabId || !this.tabs.get(tabId)) {
-        if (inflight) {
-          inflight.resolve()
-          this.inflightRequests.delete(requestId)
-        }
-        return
-      }
-
-      const tab = this.tabs.get(tabId)!
-      tab.activeRequestId = null
-      tab.runPid = null
-      if (sessionId) tab.claudeSessionId = sessionId
-
-      if (code === 0) {
-        this._setTabStatus(tabId, 'completed')
-      } else if (signal) {
-        this._setTabStatus(tabId, 'failed')
-      } else {
-        const enriched = this.ptyRunManager.getEnrichedError(requestId, code)
-        this.emit('error', tabId, enriched)
-        this._setTabStatus(tabId, code === null ? 'dead' : 'failed')
-      }
-
-      if (inflight) {
-        inflight.resolve()
-        this.inflightRequests.delete(requestId)
-      }
-
-      this._processQueue(tabId)
-    })
-
-    // Error events
-    this.ptyRunManager.on('error', (requestId: string, err: Error) => {
-      // Clean up per-run token
-      const runToken = this.runTokens.get(requestId)
-      if (runToken) {
-        this.permissionServer.unregisterRun(runToken)
-        this.runTokens.delete(requestId)
-      }
-
-      const tabId = this._findTabByRequest(requestId)
-      const inflight = this.inflightRequests.get(requestId)
-
-      this.ptyRuns.delete(requestId)
-
-      if (!tabId || !this.tabs.get(tabId)) {
-        if (inflight) {
-          inflight.reject(err)
-          this.inflightRequests.delete(requestId)
-        }
-        return
-      }
-
-      const tab = this.tabs.get(tabId)!
-      tab.activeRequestId = null
-      tab.runPid = null
-
-      this._setTabStatus(tabId, 'dead')
-
-      const enriched = this.ptyRunManager.getEnrichedError(requestId, null)
       enriched.message = err.message
       this.emit('error', tabId, enriched)
 
@@ -528,23 +402,8 @@ export class ControlPlane extends EventEmitter {
     const newStatus: TabStatus = tab.claudeSessionId ? 'running' : 'connecting'
     this._setTabStatus(tabId, newStatus)
 
-    // ─── Pick transport ───
-    // Stream-json is the stable transport for all regular messages.
-    // PTY is reserved for future interactive permission handling only.
-    const usePty = false
-
-    let pid: number | null = null
     try {
-      if (usePty) {
-        log(`Dispatching via PTY transport: ${requestId}`)
-        const handle = this.ptyRunManager.startRun(requestId, options)
-        this.ptyRuns.add(requestId)
-        pid = handle.pid
-      } else {
-        const handle = this.runManager.startRun(requestId, options)
-        pid = handle.pid
-      }
-      tab.runPid = pid
+      tab.runPid = this.runManager.startRun(requestId, options).pid
     } catch (err) {
       // Start failure before inflight registration: rollback tab run state.
       tab.activeRequestId = null
@@ -579,10 +438,6 @@ export class ControlPlane extends EventEmitter {
       return true
     }
 
-    // Cancel active run — route to correct transport
-    if (this.ptyRuns.has(requestId)) {
-      return this.ptyRunManager.cancel(requestId)
-    }
     return this.runManager.cancel(requestId)
   }
 
@@ -594,8 +449,6 @@ export class ControlPlane extends EventEmitter {
     if (!tab?.activeRequestId) return false
     return this.cancel(tab.activeRequestId)
   }
-
-  // ─── Retry ───
 
   // ─── Permission Response ───
 
@@ -609,11 +462,6 @@ export class ControlPlane extends EventEmitter {
 
     const tab = this.tabs.get(tabId)
     if (!tab?.activeRequestId) return false
-
-    // Route to correct transport
-    if (this.ptyRuns.has(tab.activeRequestId)) {
-      return this.ptyRunManager.respondToPermission(tab.activeRequestId, questionId, optionId)
-    }
 
     // Print-json transport: send structured permission response via stdin
     const msg = {
@@ -634,7 +482,6 @@ export class ControlPlane extends EventEmitter {
       let alive = false
       if (tab.activeRequestId) {
         alive = this.runManager.isRunning(tab.activeRequestId)
-          || this.ptyRunManager.isRunning(tab.activeRequestId)
       }
 
       tabEntries.push({

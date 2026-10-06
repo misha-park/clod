@@ -7,7 +7,7 @@ import { normalize } from './event-normalizer'
 import { buildUserContent } from './message-content'
 import { log as _log } from '../logger'
 import { getCliEnv } from '../cli-env'
-import type { ClaudeEvent, NormalizedEvent, RunOptions, EnrichedError } from '../../shared/types'
+import type { ClaudeEvent, RunOptions, EnrichedError } from '../../shared/types'
 
 const MAX_RING_LINES = 100
 const DEBUG = process.env.CLOD_DEBUG === '1'

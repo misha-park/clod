@@ -6,7 +6,7 @@ import { homedir } from 'os'
 import { ControlPlane } from './claude/control-plane'
 import { ensureSkills, type SkillStatus } from './skills/installer'
 import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './marketplace/catalog'
-import { log as _log, LOG_FILE, flushLogs } from './logger'
+import { log as _log, flushLogs } from './logger'
 import { getCliEnv } from './cli-env'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
@@ -61,10 +61,7 @@ let screenshotCounter = 0
 let toggleSequence = 0
 let lastWindowBounds: Electron.Rectangle | null = null
 
-// Feature flag: enable PTY interactive permissions transport
-const INTERACTIVE_PTY = process.env.CLOD_INTERACTIVE_PERMISSIONS_PTY === '1'
-
-const controlPlane = new ControlPlane(INTERACTIVE_PTY)
+const controlPlane = new ControlPlane()
 
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.

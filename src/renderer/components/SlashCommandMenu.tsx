@@ -13,7 +13,7 @@ export interface SlashCommand {
   icon: React.ReactNode
 }
 
-export const SLASH_COMMANDS: SlashCommand[] = [
+const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/clear', description: 'Clear conversation history', icon: <Trash size={13} /> },
   { command: '/cost', description: 'Show token usage and cost', icon: <CurrencyDollar size={13} /> },
   { command: '/model', description: 'Show current model info', icon: <Cpu size={13} /> },
@@ -30,9 +30,6 @@ interface Props {
   extraCommands?: SlashCommand[]
 }
 
-export function getFilteredCommands(filter: string): SlashCommand[] {
-  return getFilteredCommandsWithExtras(filter, [])
-}
 
 export function getFilteredCommandsWithExtras(filter: string, extraCommands: SlashCommand[]): SlashCommand[] {
   const q = filter.toLowerCase()

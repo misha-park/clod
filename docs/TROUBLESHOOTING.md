@@ -20,38 +20,6 @@ xcode-select --install
 npm install
 ```
 
-## Install Fails with `ModuleNotFoundError: No module named 'distutils'`
-
-Python 3.12+ removed `distutils`. Install `setuptools`:
-
-```bash
-python3 -m pip install --upgrade pip setuptools
-```
-
-```bash
-npm install
-```
-
-If that still fails, install Python 3.11 and point npm to it:
-
-```bash
-brew install python@3.11
-```
-
-```bash
-npm config set python $(brew --prefix python@3.11)/bin/python3.11
-```
-
-```bash
-npm install
-```
-
-To undo that Python override later:
-
-```bash
-npm config delete python
-```
-
 ## Install Fails with `fatal error: 'functional' file not found`
 
 C++ headers are missing/broken, usually due to Xcode CLT issues.
@@ -92,16 +60,6 @@ int main() { return 0; }
 EOF
 ```
 
-## Install Fails on `node-pty`
-
-`node-pty` is native and requires macOS toolchains. Confirm:
-
-- macOS 13+
-- Xcode CLT installed
-- Python 3 with `setuptools`/`distutils` available
-
-Then retry `npm install`.
-
 ## App Launches but No Claude Response
 
 Verify Claude CLI is installed and authenticated:
@@ -114,15 +72,19 @@ claude --version
 claude
 ```
 
-## `⌥ + Space` Does Not Toggle
+## Double-tap `⌥` Does Not Toggle
 
-Grant Accessibility permissions:
+The double-tap hotkey needs Accessibility permission:
 
-- System Settings -> Privacy & Security -> Accessibility
+- System Settings → Privacy & Security → Accessibility (shown as "Device Control and Data Access" on newer macOS)
 
-Fallback shortcut:
+If Clod is listed and switched on but the hotkey still fails, the entry is stale (it belongs to an older signature). Reset it, approve the prompt on next launch, then quit and reopen Clod:
 
-- `Cmd+Shift+K`
+```bash
+tccutil reset Accessibility com.clod.app
+```
+
+Fallback shortcut, which always works: `Cmd+Shift+K`. See "Keeping permissions across reinstalls" in the README to stop this recurring.
 
 ## Packaged App Won't Open (Security Warning)
 
@@ -135,37 +97,6 @@ To allow it:
 3. Click **Open Anyway** next to the Clod message
 
 You only need to do this once. This is a local build, not App Store distribution.
-
-## Install Fails at Whisper Step
-
-The installer requires Whisper for voice input. If it fails:
-
-1. Make sure Homebrew is installed:
-
-```bash
-brew --version
-```
-
-If not, install it:
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-2. Install Whisper manually:
-
-```bash
-# Apple Silicon (M1/M2/M3/M4) — preferred:
-brew install whisperkit-cli
-# Apple Silicon fallback, or Intel Mac:
-brew install whisper-cpp
-```
-
-3. Rerun the installer:
-
-```bash
-./install-app.command
-```
 
 ## Install Fails at Build Step
 
@@ -201,6 +132,6 @@ Expected when offline. Marketplace needs internet access; core app features cont
 
 Try:
 
-- `⌥ + Space`
+- Double-tap `⌥`
 - `Cmd+Shift+K`
 - Confirm app is running from the menu bar tray

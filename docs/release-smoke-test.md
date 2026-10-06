@@ -29,9 +29,7 @@ npm run build      # production build — must exit 0 with no errors
 ### TypeScript
 
 - `npm run build` — passes (uses esbuild, tolerant of some strict-mode warnings)
-- `npx tsc --noEmit` — has pre-existing warnings (68 as of v0.1.0, non-blocking)
-  - These are narrowing/equality warnings from Zustand selector patterns and a legacy PTY file
-  - Does NOT affect runtime behavior — electron-vite builds successfully
+- `npx tsc --noEmit` — passes with no errors
 
 ## Runtime Smoke Test Checklist
 
@@ -44,7 +42,7 @@ npm run build      # production build — must exit 0 with no errors
 ### Startup
 - [ ] `npm run dev` or `./commands/start.command` launches the app
 - [ ] Floating pill appears at bottom-center of screen
-- [ ] `⌥ + Space` toggles visibility (fallback: `Cmd+Shift+K`)
+- [ ] Double-tap `⌥` toggles visibility (fallback: `Cmd+Shift+K`)
 - [ ] Tray icon appears in menu bar
 - [ ] Tray menu shows Quit option
 
@@ -88,11 +86,6 @@ npm run build      # production build — must exit 0 with no errors
 - [ ] "Installed" filter shows installed plugins
 - [ ] Install flow shows confirmation with exact CLI commands
 - [ ] Graceful error state when offline
-
-### Voice Input (Whisper required — installed by install-app.command)
-- [ ] Microphone button starts recording
-- [ ] Stop button ends recording and transcribes
-- [ ] Transcribed text appears in input bar
 
 ### Attachments
 - [ ] Paperclip button opens file picker

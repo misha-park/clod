@@ -67,7 +67,6 @@ export function ConversationView() {
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const [hovered, setHovered] = useState(false)
   const [renderOffset, setRenderOffset] = useState(0) // 0 = show from tail
   const isNearBottomRef = useRef(true)
   const prevTabIdRef = useRef(activeTabId)
@@ -147,8 +146,6 @@ export function ConversationView() {
   return (
     <div
       data-clod-ui
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {/* Scrollable messages area */}
       <div

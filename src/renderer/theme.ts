@@ -502,14 +502,6 @@ export function useColors(): ColorPalette {
   return isDark ? darkColors : lightColors
 }
 
-/** Non-reactive getter — use outside React components */
-export function getColors(isDark: boolean): ColorPalette {
-  return isDark ? darkColors : lightColors
-}
-
-// ─── Backward compatibility ───
-// Legacy static export — components being migrated should use useColors() instead
-export const colors = darkColors
 
 // ─── Spacing ───
 
@@ -524,17 +516,4 @@ export const spacing = {
   pillRadius: 9999,
   circleSize: 36,
   circleGap: 8,
-} as const
-
-// ─── Animation ───
-
-export const motion = {
-  spring: { type: 'spring' as const, stiffness: 500, damping: 30 },
-  easeOut: { duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] as const },
-  fadeIn: {
-    initial: { opacity: 0, y: 8 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -4 },
-    transition: { duration: 0.15 },
-  },
 } as const

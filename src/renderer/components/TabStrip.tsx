@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Copy, Check, ArrowsOutLineHorizontal } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'

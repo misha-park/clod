@@ -12,7 +12,7 @@ function appendPathEntries(target: string[], seen: Set<string>, rawPath: string 
   }
 }
 
-export function getCliPath(): string {
+function getCliPath(): string {
   if (cachedPath) return cachedPath
 
   const ordered: string[] = []
