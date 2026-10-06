@@ -68,12 +68,16 @@ const controlPlane = new ControlPlane()
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
 const BAR_WIDTH = 1040
 const PILL_HEIGHT = 720  // Fixed native window height — extra room for expanded UI + shadow buffers
-const PILL_BOTTOM_MARGIN = 24
+// Gap between the work-area bottom and the window bottom. The input sits ~10px
+// above the window bottom, so the visible gap ≈ 16px, matching the right inset.
+const PILL_BOTTOM_MARGIN = 6
 
 // Horizontal placement of the overlay. 'center' = bottom-center (default),
 // 'right' = window pinned to the screen's right edge (renderer right-aligns content).
 type WindowPosition = 'center' | 'right'
-let windowPosition: WindowPosition = 'center'
+// Read from the settings file so the window is created in the right place,
+// rather than starting centred and being moved once the renderer loads.
+let windowPosition: WindowPosition = getSettings().windowPosition === 'right' ? 'right' : 'center'
 
 // Overlay toggle hotkey. 'double-option' = double-tap Option (default, via uiohook).
 // 'accelerator' = a custom Electron global shortcut. Cmd+Shift+K is always a fallback.

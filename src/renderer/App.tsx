@@ -35,35 +35,9 @@ export default function App() {
     try { window.clod.setOpenAtLogin(t.openAtLogin) } catch {}
   }, [])
 
-  // Position the overlay window: horizontal anchor (center/right) + a small,
-  // even gap from the bottom edge. Driven from the renderer via the always-loaded
-  // window-drag API so it works without a full restart. Runs on mount and when
-  // the position preference changes.
-  useEffect(() => {
-    const move = () => {
-      const scr = window.screen as Screen & { availLeft?: number; availTop?: number }
-      const availLeft = scr.availLeft ?? 0
-      const availTop = scr.availTop ?? 0
-      const winW = window.outerWidth || 1040
-      const winH = window.outerHeight || 720
-      // Gap from the work-area bottom to the window bottom. The input sits ~10px
-      // above the window bottom, so the visible bottom gap ≈ this + 10 ≈ the 16px
-      // right-edge inset.
-      const WINDOW_BOTTOM_GAP = 6
-      const targetX = windowPosition === 'right'
-        ? availLeft + scr.availWidth - winW
-        : availLeft + Math.round((scr.availWidth - winW) / 2)
-      const targetY = availTop + scr.availHeight - winH - WINDOW_BOTTOM_GAP
-      const deltaX = Math.round(targetX - window.screenX)
-      const deltaY = Math.round(targetY - window.screenY)
-      if ((deltaX !== 0 || deltaY !== 0) && window.clod?.startWindowDrag) {
-        window.clod.startWindowDrag(deltaX, deltaY)
-      }
-    }
-    // Defer a tick so window.screenX/Y reflect the current native bounds.
-    const id = setTimeout(move, 0)
-    return () => clearTimeout(id)
-  }, [windowPosition])
+  // Window placement is owned by the main process (SET_WINDOW_POSITION →
+  // resetWindowPosition). A second, relative move from here used to stack on
+  // top of it at launch and push the window half off the screen.
 
   // ─── Theme initialization ───
   useEffect(() => {
@@ -105,7 +79,7 @@ export default function App() {
 
   // Vertical position tracking — window moves first (until macOS clamps it), then CSS overflows
   const PILL_HEIGHT_CONST = 720
-  const PILL_BOTTOM_MARGIN_CONST = 24
+  const PILL_BOTTOM_MARGIN_CONST = 6
   const minWindowY = window.screen.availTop   // top of work area (below menu bar)
   const initialWindowY = window.screen.availTop + window.screen.availHeight - PILL_HEIGHT_CONST - PILL_BOTTOM_MARGIN_CONST
   const windowYRef = useRef(initialWindowY)
