@@ -9,6 +9,7 @@ import { MarketplacePanel } from './components/MarketplacePanel'
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
+import { useFolderDrop } from './hooks/useFolderDrop'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore, spacing } from './theme'
 
@@ -138,13 +139,23 @@ export default function App() {
       }
     }
 
+    // Cursor position pushed from the main process. Unlike mousemove, this
+    // keeps arriving during an OS drag, so the card can accept dropped folders.
+    const offCursor = window.clod.onCursorPoint?.((point) => {
+      if (point) onMouseMove({ clientX: point.x, clientY: point.y } as MouseEvent)
+      else onMouseLeave()
+    })
+
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseleave', onMouseLeave)
     return () => {
+      offCursor?.()
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseleave', onMouseLeave)
     }
   }, [])
+
+  const draggingFiles = useFolderDrop()
 
   // Manual window drag — bypasses -webkit-app-region conflicts with setIgnoreMouseEvents
   useEffect(() => {
@@ -302,7 +313,7 @@ export default function App() {
               marginLeft: isExpanded ? 0 : cardCollapsedMargin,
               marginRight: isExpanded ? 0 : cardCollapsedMargin,
               background: isExpanded ? colors.containerBg : colors.containerBgCollapsed,
-              borderColor: colors.containerBorder,
+              borderColor: draggingFiles ? colors.accent : colors.containerBorder,
               boxShadow: isExpanded ? colors.cardShadow : colors.cardShadowCollapsed,
               // Compact: rounded top only, square bottom. Expanded: all four rounded.
               borderBottomLeftRadius: isExpanded ? 20 : 0,
@@ -318,6 +329,20 @@ export default function App() {
               zIndex: isExpanded ? 20 : 10,
             }}
           >
+            {draggingFiles && (
+              <div
+                className="absolute inset-0 flex items-center justify-center text-[12px] font-medium"
+                style={{
+                  zIndex: 50,
+                  pointerEvents: 'none',
+                  borderRadius: 'inherit',
+                  background: colors.containerBg,
+                  color: colors.accent,
+                }}
+              >
+                Drop a folder to work in it
+              </div>
+            )}
             {/* Tab strip — always mounted */}
             <div className="no-drag">
               <TabStrip />

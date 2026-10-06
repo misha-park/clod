@@ -360,6 +360,7 @@ export const IPC = {
   HIDE_WINDOW: 'clod:hide-window',
   WINDOW_SHOWN: 'clod:window-shown',
   SET_IGNORE_MOUSE_EVENTS: 'clod:set-ignore-mouse-events',
+  CURSOR_POINT: 'clod:cursor-point',
   START_WINDOW_DRAG: 'clod:start-window-drag',
   RESET_WINDOW_POSITION: 'clod:reset-window-position',
   SET_WINDOW_POSITION: 'clod:set-window-position',

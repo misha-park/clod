@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, HealthReport, EnrichedError, Attachment, SessionMeta, CatalogPlugin, SessionLoadMessage } from '../shared/types'
 
@@ -61,6 +61,8 @@ export interface ClodAPI {
   onError(callback: (tabId: string, error: EnrichedError) => void): () => void
   onSkillStatus(callback: (status: { name: string; state: string; error?: string; reason?: string }) => void): () => void
   onWindowShown(callback: () => void): () => void
+  onCursorPoint(callback: (point: { x: number; y: number } | null) => void): () => void
+  getPathForFile(file: File): string
 }
 
 const api: ClodAPI = {
@@ -160,6 +162,15 @@ const api: ClodAPI = {
     ipcRenderer.on(IPC.WINDOW_SHOWN, handler)
     return () => ipcRenderer.removeListener(IPC.WINDOW_SHOWN, handler)
   },
+
+  onCursorPoint: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, point: { x: number; y: number } | null) => callback(point)
+    ipcRenderer.on(IPC.CURSOR_POINT, handler)
+    return () => ipcRenderer.removeListener(IPC.CURSOR_POINT, handler)
+  },
+
+  // File.path was removed in Electron 32; this is the supported replacement.
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 }
 
 contextBridge.exposeInMainWorld('clod', api)

@@ -217,6 +217,29 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  startCursorTracking()
+}
+
+// Click-through is normally toggled from forwarded mousemove events, but macOS
+// sends none while the user drags something (e.g. a folder from Finder), so the
+// overlay would stay click-through and never receive the drop. Report the cursor
+// position whenever it is over the window so the renderer can run the same
+// hit-test it uses for mousemove. Only sends when the cursor actually moves.
+let cursorTimer: ReturnType<typeof setInterval> | null = null
+function startCursorTracking(): void {
+  if (cursorTimer) return
+  let last: string | null = null
+  cursorTimer = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return
+    const p = screen.getCursorScreenPoint()
+    const b = mainWindow.getBounds()
+    const inside = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height
+    const key = inside ? `${p.x - b.x},${p.y - b.y}` : 'out'
+    if (key === last) return
+    last = key
+    mainWindow.webContents.send(IPC.CURSOR_POINT, inside ? { x: p.x - b.x, y: p.y - b.y } : null)
+  }, 50)
 }
 
 function showWindow(source = 'unknown'): void {
