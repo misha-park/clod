@@ -39,3 +39,4 @@ Desktop.ini
 
 # electron-vite transpiled config temp files
 electron.vite.config.*.mjs
+dist-native/

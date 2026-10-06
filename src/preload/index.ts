@@ -63,6 +63,11 @@ export interface ClodAPI {
   onWindowShown(callback: () => void): () => void
   onCursorPoint(callback: (point: { x: number; y: number } | null) => void): () => void
   getPathForFile(file: File): string
+  getSettingsSync(): { settings: Record<string, unknown>; existed: boolean }
+  saveSettings(partial: Record<string, unknown>): void
+  onSettingsChanged(callback: (settings: Record<string, unknown>) => void): () => void
+  publishState(partial: Record<string, unknown>): void
+  openSettings(): void
 }
 
 const api: ClodAPI = {
@@ -171,6 +176,16 @@ const api: ClodAPI = {
 
   // File.path was removed in Electron 32; this is the supported replacement.
   getPathForFile: (file) => webUtils.getPathForFile(file),
+
+  getSettingsSync: () => ipcRenderer.sendSync(IPC.SETTINGS_GET_SYNC),
+  saveSettings: (partial) => ipcRenderer.send(IPC.SETTINGS_SAVE, partial),
+  onSettingsChanged: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, settings: Record<string, unknown>) => callback(settings)
+    ipcRenderer.on(IPC.SETTINGS_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC.SETTINGS_CHANGED, handler)
+  },
+  publishState: (partial) => ipcRenderer.send(IPC.PUBLISH_STATE, partial),
+  openSettings: () => ipcRenderer.send(IPC.OPEN_SETTINGS),
 }
 
 contextBridge.exposeInMainWorld('clod', api)

@@ -11,6 +11,7 @@ import { getCliEnv } from './cli-env'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 import { registerOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
+import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
 
 const DEBUG_MODE = process.env.CLOD_DEBUG === '1'
 const SPACES_DEBUG = DEBUG_MODE || process.env.CLOD_SPACES_DEBUG === '1'
@@ -222,6 +223,16 @@ function createWindow(): void {
   }
 
   startCursorTracking()
+  watchSettings((settings) => {
+    log('Settings changed externally — applying')
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.SETTINGS_CHANGED, settings)
+  })
+  // Keep the Accessibility status shown in the settings app current
+  // (publishState only writes when the value actually changes).
+  setInterval(() => {
+    if (process.platform !== 'darwin') return
+    publishState({ accessibilityGranted: systemPreferences.isTrustedAccessibilityClient(false) })
+  }, 3000)
 }
 
 // Click-through is normally toggled from forwarded mousemove events, but macOS
@@ -330,6 +341,48 @@ ipcMain.on(IPC.HIDE_WINDOW, () => {
 ipcMain.handle(IPC.IS_VISIBLE, () => {
   return mainWindow?.isVisible() ?? false
 })
+
+// ─── Settings ───
+// The renderer loads settings synchronously at startup (its stores initialise
+// at module load), then saves partial updates. `existed` tells it whether to
+// migrate values it previously kept in localStorage.
+ipcMain.on(IPC.SETTINGS_GET_SYNC, (event) => {
+  event.returnValue = { settings: getSettings(), existed: settingsFileExisted }
+})
+ipcMain.on(IPC.SETTINGS_SAVE, (_e, partial: Record<string, unknown>) => {
+  if (partial && typeof partial === 'object') saveSettings(partial)
+})
+ipcMain.on(IPC.PUBLISH_STATE, (_e, partial: Record<string, unknown>) => {
+  if (partial && typeof partial === 'object') publishState(partial)
+})
+ipcMain.on(IPC.OPEN_SETTINGS, () => openSettingsApp())
+
+/** Path of the bundled native settings app (or the local build in dev). */
+function settingsAppPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, '..', 'Helpers', 'Clod Settings.app')
+    : join(app.getAppPath(), 'dist-native', 'Clod Settings.app')
+}
+
+function openSettingsApp(): void {
+  // Refresh what only Clod knows before the settings app reads it.
+  publishState({
+    accessibilityGranted: process.platform === 'darwin'
+      ? systemPreferences.isTrustedAccessibilityClient(false) : true,
+    defaultDir: join(homedir(), 'Documents', 'clod-scratch'),
+  })
+  const path = settingsAppPath()
+  if (!existsSync(path)) {
+    log(`Settings app not found at ${path}`)
+    dialog.showErrorBox('Clod Settings not found',
+      `The settings app is missing:\n${path}\n\nReinstall Clod with install-app.command.`)
+    return
+  }
+  // `open` reuses a running instance, bringing its window to the front.
+  const { spawn } = require('child_process')
+  spawn('/usr/bin/open', [path], { stdio: 'ignore', detached: true }).unref()
+  log(`Opened settings app: ${path}`)
+}
 
 // OS-level click-through toggle — renderer calls this on mousemove
 // to enable clicks on interactive UI while passing through transparent areas
@@ -1339,6 +1392,8 @@ app.whenReady().then(async () => {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show Clod', click: () => showWindow('tray menu') },
+      { label: 'Settings…', accelerator: 'Command+,', click: () => openSettingsApp() },
+      { type: 'separator' },
       { label: 'Quit', click: () => { app.quit() } },
     ])
   )

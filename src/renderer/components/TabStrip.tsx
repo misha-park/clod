@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Copy, Check, ArrowsOutLineHorizontal } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { HistoryPicker } from './HistoryPicker'
-import { SettingsPopover } from './SettingsPopover'
+import { SettingsButton } from './SettingsButton'
 import { useColors, useThemeStore } from '../theme'
 import type { TabStatus } from '../../shared/types'
 
@@ -184,7 +184,7 @@ export function TabStrip() {
 
         <HistoryPicker />
 
-        <SettingsPopover />
+        <SettingsButton />
       </div>
     </div>
   )

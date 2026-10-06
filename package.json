@@ -13,15 +13,16 @@
   "homepage": "https://github.com/misha-park/clod#readme",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "bash scripts/build-settings.sh && electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "electron-vite preview",
-    "dist": "electron-vite build --mode production && electron-builder --mac --dir",
+    "dist": "bash scripts/build-settings.sh && electron-vite build --mode production && electron-builder --mac --dir",
     "doctor": "bash scripts/doctor.sh",
-    "postinstall": "electron-builder install-app-deps && bash scripts/patch-dev-icon.sh"
+    "postinstall": "electron-builder install-app-deps && bash scripts/patch-dev-icon.sh",
+    "build:settings": "bash scripts/build-settings.sh"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -55,7 +56,13 @@
       "entitlementsInherit": "resources/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Clod uses your microphone to transcribe voice input locally with Whisper."
-      }
+      },
+      "extraFiles": [
+        {
+          "from": "dist-native/Clod Settings.app",
+          "to": "Helpers/Clod Settings.app"
+        }
+      ]
     }
   },
   "devDependencies": {

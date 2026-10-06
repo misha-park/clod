@@ -1,3 +1,4 @@
+import { loadInitialSettings, persistSettings, onExternalSettingsChange } from './settings-sync'
 /**
  * CLOD Design Tokens — Dual theme (dark + light)
  * Colors derived from ChatCN oklch system and design-fixed.html reference.
@@ -360,11 +361,9 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   openAtLogin: true,
 }
 
-function loadSettings(): PersistedSettings {
+function validateSettings(p: Record<string, any>): PersistedSettings {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY)
-    if (raw) {
-      const p = JSON.parse(raw)
+    {
       return {
         themeMode: ['light', 'dark'].includes(p.themeMode) ? p.themeMode : 'dark',
         soundEnabled: typeof p.soundEnabled === 'boolean' ? p.soundEnabled : true,
@@ -381,8 +380,12 @@ function loadSettings(): PersistedSettings {
   return { ...DEFAULT_SETTINGS }
 }
 
+function loadSettings(): PersistedSettings {
+  return validateSettings(loadInitialSettings(SETTINGS_KEY))
+}
+
 function saveSettings(s: PersistedSettings): void {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
+  persistSettings({ ...s })
 }
 
 // Wide (full-width) mode is on by default; the user's saved preference wins.
@@ -471,6 +474,27 @@ export const useThemeStore = create<ThemeState>((set, get) => {
 
 // Initialize CSS vars with saved theme
 syncTokensToCss(saved.themeMode === 'light' ? lightColors : darkColors)
+
+// Write the current values once, so the settings file exists (and migrated
+// localStorage values are kept) before the settings app first opens.
+saveSettings(saved)
+
+// Apply changes made in the native settings app through the normal setters,
+// so their side effects (window position, hotkey, login item) still run.
+onExternalSettingsChange((raw) => {
+  const next = validateSettings(raw as Record<string, any>)
+  const s = useThemeStore.getState()
+  if (next.themeMode !== s.themeMode) s.setThemeMode(next.themeMode)
+  if (next.soundEnabled !== s.soundEnabled) s.setSoundEnabled(next.soundEnabled)
+  if (next.expandedUI !== s.expandedUI) s.setExpandedUI(next.expandedUI)
+  if (next.windowPosition !== s.windowPosition) s.setWindowPosition(next.windowPosition)
+  if (next.inputPlaceholder !== s.inputPlaceholder) s.setInputPlaceholder(next.inputPlaceholder)
+  if (next.borderAnimation !== s.borderAnimation) s.setBorderAnimation(next.borderAnimation)
+  if (next.openAtLogin !== s.openAtLogin) s.setOpenAtLogin(next.openAtLogin)
+  if (next.hotkeyMode !== s.hotkeyMode || next.hotkeyAccelerator !== s.hotkeyAccelerator) {
+    s.setHotkey(next.hotkeyMode, next.hotkeyAccelerator)
+  }
+})
 
 /** Reactive hook — returns the active color palette */
 export function useColors(): ColorPalette {

@@ -361,6 +361,13 @@ export const IPC = {
   WINDOW_SHOWN: 'clod:window-shown',
   SET_IGNORE_MOUSE_EVENTS: 'clod:set-ignore-mouse-events',
   CURSOR_POINT: 'clod:cursor-point',
+
+  // Settings (shared settings.json, edited by the native settings app)
+  SETTINGS_GET_SYNC: 'clod:settings-get-sync',
+  SETTINGS_SAVE: 'clod:settings-save',
+  SETTINGS_CHANGED: 'clod:settings-changed',
+  PUBLISH_STATE: 'clod:publish-state',
+  OPEN_SETTINGS: 'clod:open-settings',
   START_WINDOW_DRAG: 'clod:start-window-drag',
   RESET_WINDOW_POSITION: 'clod:reset-window-position',
   SET_WINDOW_POSITION: 'clod:set-window-position',

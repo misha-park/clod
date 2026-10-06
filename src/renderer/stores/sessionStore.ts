@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
 import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { useThemeStore } from '../theme'
 import notificationSrc from '../../../resources/notification.mp3'
@@ -41,6 +42,14 @@ function rememberResolvedModel(modelId: unknown): void {
   if (resolvedModels[family] === id) return
   resolvedModels[family] = id
   try { localStorage.setItem(RESOLVED_MODELS_KEY, JSON.stringify(resolvedModels)) } catch {}
+  publishModels()
+}
+
+/** Tell the settings app which models exist and what version each resolves to. */
+function publishModels(): void {
+  try {
+    window.clod.publishState({ models: AVAILABLE_MODELS.map((m) => ({ id: m.id, label: m.label })) })
+  } catch {}
 }
 
 export const AVAILABLE_MODELS: ReadonlyArray<{ readonly id: string; readonly label: string }> =
@@ -50,6 +59,8 @@ export const AVAILABLE_MODELS: ReadonlyArray<{ readonly id: string; readonly lab
       return resolvedModels[id] ? getModelDisplayLabel(resolvedModels[id]) : MODEL_FAMILY_NAMES[id]
     },
   }))
+
+publishModels()
 
 /** Map a pinned model ID saved by older builds (e.g. claude-sonnet-5) to its family alias. */
 function toModelAlias(id: string): string {
@@ -103,11 +114,9 @@ const DEFAULT_PREFS: SessionPrefs = {
   defaultDirOverride: null,
 }
 
-function loadPrefs(): SessionPrefs {
+function validatePrefs(p: Record<string, any>): SessionPrefs {
   try {
-    const raw = localStorage.getItem(PREFS_KEY)
-    if (raw) {
-      const p = JSON.parse(raw)
+    {
       return {
         preferredModel: typeof p.preferredModel === 'string'
           ? toModelAlias(p.preferredModel)
@@ -120,11 +129,16 @@ function loadPrefs(): SessionPrefs {
   return { ...DEFAULT_PREFS }
 }
 
+function loadPrefs(): SessionPrefs {
+  return validatePrefs(loadInitialSettings(PREFS_KEY))
+}
+
 function savePrefs(p: SessionPrefs): void {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)) } catch {}
+  persistSettings({ ...p })
 }
 
 const initialPrefs = loadPrefs()
+savePrefs(initialPrefs) // ensure the settings file holds these (migrates localStorage)
 
 // ─── Store ───
 
@@ -1060,3 +1074,12 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
   },
 }))
+
+// Apply changes made in the native settings app through the normal setters.
+onExternalSettingsChange((raw) => {
+  const next = validatePrefs(raw as Record<string, any>)
+  const s = useSessionStore.getState()
+  if (next.preferredModel !== s.preferredModel) s.setPreferredModel(next.preferredModel as string)
+  if (next.permissionMode !== s.permissionMode) s.setPermissionMode(next.permissionMode)
+  if (next.defaultDirOverride !== s.defaultDirOverride) s.setDefaultDirOverride(next.defaultDirOverride)
+})

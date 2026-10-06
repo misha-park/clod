@@ -1,0 +1,139 @@
+import AppKit
+import Foundation
+
+struct ModelOption: Identifiable, Hashable {
+    let id: String
+    let label: String
+}
+
+/// Reads and writes Clod's shared settings file.
+///
+/// ~/Library/Application Support/Clod/settings.json is owned by Clod's main
+/// process, which merges updates and pushes changes to the overlay. This app
+/// edits it with read-modify-write so keys it doesn't know about survive.
+/// state.json is read-only here: values only Clod can determine.
+@MainActor
+final class SettingsModel: ObservableObject {
+    static let directory = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Clod", isDirectory: true)
+    let settingsURL = directory.appendingPathComponent("settings.json")
+    let stateURL = directory.appendingPathComponent("state.json")
+
+    static let defaultPlaceholder = "What do you want this time ..."
+
+    // Settings (keys and defaults mirror the overlay's stores)
+    @Published private(set) var themeMode = "dark"
+    @Published private(set) var soundEnabled = true
+    @Published private(set) var expandedUI = true
+    @Published private(set) var windowPosition = "center"
+    @Published private(set) var inputPlaceholder = SettingsModel.defaultPlaceholder
+    @Published private(set) var borderAnimation = true
+    @Published private(set) var hotkeyMode = "double-option"
+    @Published private(set) var hotkeyAccelerator = ""
+    @Published private(set) var openAtLogin = true
+    @Published private(set) var preferredModel = "sonnet"
+    @Published private(set) var permissionMode = "ask"
+    @Published private(set) var defaultDirOverride: String?
+
+    // State published by Clod
+    @Published private(set) var accessibilityGranted: Bool?
+    @Published private(set) var defaultDir = "~/Documents/clod-scratch"
+    @Published private(set) var models: [ModelOption] = [
+        ModelOption(id: "fable", label: "Fable"),
+        ModelOption(id: "opus", label: "Opus"),
+        ModelOption(id: "sonnet", label: "Sonnet"),
+        ModelOption(id: "haiku", label: "Haiku"),
+    ]
+
+    private var settingsMtime: Date?
+    private var stateMtime: Date?
+    private var timer: Timer?
+
+    init() {
+        reloadSettings()
+        reloadState()
+        // Poll for changes made by Clod (cheap: two stat calls).
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.pollFiles() }
+        }
+    }
+
+    // MARK: Writing
+
+    func set(_ key: String, _ value: Any?) {
+        var dict = readJSON(settingsURL) ?? [:]
+        dict[key] = value ?? NSNull()
+        writeJSON(dict, to: settingsURL)
+        settingsMtime = modificationDate(settingsURL)
+        apply(dict)
+    }
+
+    func setHotkey(mode: String, accelerator: String) {
+        var dict = readJSON(settingsURL) ?? [:]
+        dict["hotkeyMode"] = mode
+        dict["hotkeyAccelerator"] = accelerator
+        writeJSON(dict, to: settingsURL)
+        settingsMtime = modificationDate(settingsURL)
+        apply(dict)
+    }
+
+    // MARK: Reading
+
+    private func pollFiles() {
+        if modificationDate(settingsURL) != settingsMtime { reloadSettings() }
+        if modificationDate(stateURL) != stateMtime { reloadState() }
+    }
+
+    private func reloadSettings() {
+        settingsMtime = modificationDate(settingsURL)
+        if let dict = readJSON(settingsURL) { apply(dict) }
+    }
+
+    private func apply(_ d: [String: Any]) {
+        themeMode = (d["themeMode"] as? String) == "light" ? "light" : "dark"
+        soundEnabled = d["soundEnabled"] as? Bool ?? true
+        expandedUI = d["expandedUI"] as? Bool ?? true
+        windowPosition = (d["windowPosition"] as? String) == "right" ? "right" : "center"
+        inputPlaceholder = d["inputPlaceholder"] as? String ?? SettingsModel.defaultPlaceholder
+        borderAnimation = d["borderAnimation"] as? Bool ?? true
+        hotkeyMode = (d["hotkeyMode"] as? String) == "accelerator" ? "accelerator" : "double-option"
+        hotkeyAccelerator = d["hotkeyAccelerator"] as? String ?? ""
+        openAtLogin = d["openAtLogin"] as? Bool ?? true
+        preferredModel = d["preferredModel"] as? String ?? "sonnet"
+        permissionMode = (d["permissionMode"] as? String) == "auto" ? "auto" : "ask"
+        defaultDirOverride = d["defaultDirOverride"] as? String
+    }
+
+    private func reloadState() {
+        stateMtime = modificationDate(stateURL)
+        guard let d = readJSON(stateURL) else { return }
+        accessibilityGranted = d["accessibilityGranted"] as? Bool
+        if let dir = d["defaultDir"] as? String { defaultDir = dir }
+        if let list = d["models"] as? [[String: Any]] {
+            let parsed = list.compactMap { m -> ModelOption? in
+                guard let id = m["id"] as? String, let label = m["label"] as? String else { return nil }
+                return ModelOption(id: id, label: label)
+            }
+            if !parsed.isEmpty { models = parsed }
+        }
+    }
+
+    // MARK: Files
+
+    private func modificationDate(_ url: URL) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    }
+
+    private func readJSON(_ url: URL) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private func writeJSON(_ dict: [String: Any], to url: URL) {
+        try? FileManager.default.createDirectory(at: SettingsModel.directory, withIntermediateDirectories: true)
+        guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) else { return }
+        // Atomic write: Clod never sees a half-written file.
+        try? data.write(to: url, options: .atomic)
+    }
+}
