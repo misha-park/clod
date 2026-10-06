@@ -6,39 +6,62 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                HeaderView()
+            }
+
             Section("General") {
-                Toggle("Open at login", isOn: bind(\.openAtLogin, "openAtLogin"))
-                Toggle("Notification sound", isOn: bind(\.soundEnabled, "soundEnabled"))
+                Toggle(isOn: bind(\.openAtLogin, "openAtLogin")) {
+                    RowLabel("Open at login", symbol: "power", color: .gray)
+                }
+                Toggle(isOn: bind(\.soundEnabled, "soundEnabled")) {
+                    RowLabel("Notification sound", symbol: "bell.fill", color: .red)
+                }
             }
 
             Section("Appearance") {
-                Picker("Theme", selection: bind(\.themeMode, "themeMode")) {
+                Picker(selection: bind(\.themeMode, "themeMode")) {
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
+                } label: {
+                    RowLabel("Theme", symbol: "circle.lefthalf.filled", color: .indigo)
                 }
                 .pickerStyle(.segmented)
-                Picker("Screen position", selection: bind(\.windowPosition, "windowPosition")) {
+                Picker(selection: bind(\.windowPosition, "windowPosition")) {
                     Text("Center").tag("center")
                     Text("Right").tag("right")
+                } label: {
+                    RowLabel("Screen position", symbol: "macwindow", color: .blue)
                 }
                 .pickerStyle(.segmented)
-                Toggle("Full width", isOn: bind(\.expandedUI, "expandedUI"))
-                Toggle("Input glow", isOn: bind(\.borderAnimation, "borderAnimation"))
-                TextField("Input prompt", text: bind(\.inputPlaceholder, "inputPlaceholder"),
-                          prompt: Text(SettingsModel.defaultPlaceholder))
+                Toggle(isOn: bind(\.expandedUI, "expandedUI")) {
+                    RowLabel("Full width", symbol: "arrow.left.and.right", color: .teal)
+                }
+                Toggle(isOn: bind(\.borderAnimation, "borderAnimation")) {
+                    RowLabel("Input glow", symbol: "sparkles", color: .purple)
+                }
+                TextField(text: bind(\.inputPlaceholder, "inputPlaceholder"),
+                          prompt: Text(SettingsModel.defaultPlaceholder)) {
+                    RowLabel("Input prompt", symbol: "text.cursor", color: .pink)
+                }
             }
 
             Section {
-                Picker("Show Clod with", selection: hotkeyModeBinding) {
+                Picker(selection: hotkeyModeBinding) {
                     Text("Double-tap ⌥ Option").tag("double-option")
                     Text("Custom shortcut").tag("accelerator")
+                } label: {
+                    RowLabel("Show Clod with", symbol: "keyboard", color: .gray)
                 }
                 .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
                 if model.hotkeyMode == "accelerator" {
-                    LabeledContent("Shortcut") {
+                    LabeledContent {
                         ShortcutRecorder(current: model.hotkeyAccelerator) { accel in
                             model.setHotkey(mode: "accelerator", accelerator: accel)
                         }
+                    } label: {
+                        RowLabel("Shortcut", symbol: "command", color: .blue)
                     }
                 }
             } header: {
@@ -48,10 +71,13 @@ struct SettingsView: View {
             }
 
             Section {
-                Picker("Default model", selection: bind(\.preferredModel, "preferredModel")) {
+                Picker(selection: bind(\.preferredModel, "preferredModel")) {
                     ForEach(model.models) { m in Text(m.label).tag(m.id) }
+                } label: {
+                    RowLabel("Default model", symbol: "cpu", color: .clodAccent)
                 }
-                LabeledContent("Default folder") {
+                .tint(nil)
+                LabeledContent {
                     HStack {
                         Text(abbreviate(model.defaultDirOverride ?? model.defaultDir))
                             .foregroundStyle(.secondary)
@@ -63,11 +89,16 @@ struct SettingsView: View {
                             Button("Reset") { model.set("defaultDirOverride", nil) }
                         }
                     }
+                } label: {
+                    RowLabel("Default folder", symbol: "folder.fill", color: .cyan)
                 }
-                Toggle("Auto-approve tools", isOn: Binding(
+                .tint(nil)
+                Toggle(isOn: Binding(
                     get: { model.permissionMode == "auto" },
                     set: { model.set("permissionMode", $0 ? "auto" : "ask") }
-                ))
+                )) {
+                    RowLabel("Auto-approve tools", symbol: "checkmark.shield.fill", color: .green)
+                }
             } header: {
                 Text("Claude")
             } footer: {
@@ -76,7 +107,7 @@ struct SettingsView: View {
 
             if let granted = model.accessibilityGranted {
                 Section {
-                    LabeledContent("Accessibility") {
+                    LabeledContent {
                         if granted {
                             Label("Granted", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
@@ -85,8 +116,11 @@ struct SettingsView: View {
                                 Label("Not granted", systemImage: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
                                 Button("Open Privacy Settings…", action: openAccessibilitySettings)
+                                    .tint(nil)
                             }
                         }
+                    } label: {
+                        RowLabel("Accessibility", symbol: "accessibility", color: .blue)
                     }
                 } header: {
                     Text("Permissions")
@@ -99,6 +133,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .tint(.clodAccent)
     }
 
     // MARK: Helpers

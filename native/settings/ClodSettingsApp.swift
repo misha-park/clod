@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
         NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        // SwiftUI focuses (and selects) the first text field on open; clear it so
+        // a stray keystroke can't overwrite the input prompt.
+        DispatchQueue.main.async { NSApp.windows.first?.makeFirstResponder(nil) }
     }
 }
 
@@ -38,10 +41,11 @@ struct ClodSettingsApp: App {
         Window("Clod Settings", id: "settings") {
             SettingsView()
                 .environmentObject(model)
-                .frame(width: 480)
-                .frame(minHeight: 420, idealHeight: 660)
+                .frame(minWidth: 420, idealWidth: 480, maxWidth: 900)
+                .frame(minHeight: 420, idealHeight: 620)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 480, height: 620)
+        .windowResizability(.contentMinSize)
         .defaultPosition(.center)
     }
 }
