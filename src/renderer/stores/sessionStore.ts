@@ -5,11 +5,57 @@ import notificationSrc from '../../../resources/notification.mp3'
 
 // ─── Known models ───
 
-export const AVAILABLE_MODELS = [
-  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-] as const
+// Model IDs are CLI aliases, which always resolve to the newest model in each
+// family. Labels show the concrete version each alias last resolved to, learned
+// from the model the CLI reports in session_init, so they track upgrades too.
+
+type ModelFamily = 'fable' | 'opus' | 'sonnet' | 'haiku'
+
+const MODEL_FAMILY_NAMES: Record<ModelFamily, string> = {
+  fable: 'Fable', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku',
+}
+
+const RESOLVED_MODELS_KEY = 'clod-resolved-models'
+
+const RESOLVED_MODELS_SEED: Record<ModelFamily, string> = {
+  fable: 'claude-fable-5-1',
+  opus: 'claude-opus-5-5',
+  sonnet: 'claude-sonnet-5-5',
+  haiku: 'claude-haiku-4-5-20251001',
+}
+
+const resolvedModels: Record<string, string> = (() => {
+  try {
+    return { ...RESOLVED_MODELS_SEED, ...JSON.parse(localStorage.getItem(RESOLVED_MODELS_KEY) || '{}') }
+  } catch {
+    return { ...RESOLVED_MODELS_SEED }
+  }
+})()
+
+function rememberResolvedModel(modelId: unknown): void {
+  if (typeof modelId !== 'string') return
+  const id = normalizeModelId(modelId)
+  const m = /^claude-(fable|opus|sonnet|haiku)-/i.exec(id)
+  if (!m) return
+  const family = m[1].toLowerCase()
+  if (resolvedModels[family] === id) return
+  resolvedModels[family] = id
+  try { localStorage.setItem(RESOLVED_MODELS_KEY, JSON.stringify(resolvedModels)) } catch {}
+}
+
+export const AVAILABLE_MODELS: ReadonlyArray<{ readonly id: string; readonly label: string }> =
+  (['fable', 'opus', 'sonnet', 'haiku'] as const).map((id) => ({
+    id,
+    get label() {
+      return resolvedModels[id] ? getModelDisplayLabel(resolvedModels[id]) : MODEL_FAMILY_NAMES[id]
+    },
+  }))
+
+/** Map a pinned model ID saved by older builds (e.g. claude-sonnet-5) to its family alias. */
+function toModelAlias(id: string): string {
+  const m = /^claude-(fable|opus|sonnet|haiku)-/i.exec(id)
+  return m ? m[1].toLowerCase() : id
+}
 
 function normalizeModelId(modelId: string): string {
   // Claude sometimes appends context window hints like "[1m]" to model IDs.
@@ -29,10 +75,12 @@ export function getModelDisplayLabel(modelId: string): string {
   const compact = normalizedId
     .replace(/^claude-/, '')
     .replace(/-\d{8}$/, '')
-  const familyMatch = compact.match(/^(opus|sonnet|haiku)-(\d+)-(\d+)$/i)
+  const familyMatch = compact.match(/^(fable|opus|sonnet|haiku)-(\d+)(?:-(\d+))?$/i)
   if (familyMatch) {
     const family = familyMatch[1][0].toUpperCase() + familyMatch[1].slice(1).toLowerCase()
-    const label = `${family} ${familyMatch[2]}.${familyMatch[3]}`
+    const label = familyMatch[3]
+      ? `${family} ${familyMatch[2]}.${familyMatch[3]}`
+      : `${family} ${familyMatch[2]}`
     return has1MContext ? `${label} (1M)` : label
   }
 
@@ -50,7 +98,7 @@ interface SessionPrefs {
 }
 
 const DEFAULT_PREFS: SessionPrefs = {
-  preferredModel: 'claude-sonnet-5',
+  preferredModel: 'sonnet',
   permissionMode: 'ask',
   defaultDirOverride: null,
 }
@@ -61,8 +109,9 @@ function loadPrefs(): SessionPrefs {
     if (raw) {
       const p = JSON.parse(raw)
       return {
-        preferredModel: typeof p.preferredModel === 'string' || p.preferredModel === null
-          ? p.preferredModel : DEFAULT_PREFS.preferredModel,
+        preferredModel: typeof p.preferredModel === 'string'
+          ? toModelAlias(p.preferredModel)
+          : p.preferredModel === null ? null : DEFAULT_PREFS.preferredModel,
         permissionMode: p.permissionMode === 'auto' ? 'auto' : 'ask',
         defaultDirOverride: typeof p.defaultDirOverride === 'string' ? p.defaultDirOverride : null,
       }
@@ -719,6 +768,7 @@ export const useSessionStore = create<State>((set, get) => ({
           case 'session_init':
             updated.claudeSessionId = event.sessionId
             updated.sessionModel = event.model
+            rememberResolvedModel(event.model)
             updated.sessionTools = event.tools
             updated.sessionMcpServers = event.mcpServers
             updated.sessionSkills = event.skills

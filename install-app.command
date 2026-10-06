@@ -162,6 +162,24 @@ fi
 
 echo "Found: $APP_SOURCE"
 
+# Re-sign with the local "Clod Local Signing" certificate when it exists. An
+# ad-hoc signature changes on every build, which makes macOS forget Clod's
+# Accessibility / Screen Recording grants; a fixed certificate keeps them.
+# See "Keeping permissions across reinstalls" in README.md.
+SIGN_CN="Clod Local Signing"
+SIGN_ID="$(security find-identity -p codesigning 2>/dev/null | awk -v cn="\"$SIGN_CN\"" 'index($0, cn) { print $2; exit }')"
+if [ -n "$SIGN_ID" ]; then
+  if codesign --force --sign "$SIGN_ID" --options runtime \
+       --entitlements resources/entitlements.mac.plist "$APP_SOURCE"; then
+    echo "Signed with \"$SIGN_CN\" — permissions will carry over."
+  else
+    echo "Signing with \"$SIGN_CN\" failed — keeping the ad-hoc signature."
+  fi
+else
+  echo "No \"$SIGN_CN\" certificate found — keeping the ad-hoc signature."
+  echo "macOS will ask for permissions again after this install (see README.md)."
+fi
+
 if [ -d "$DEST" ]; then
   echo "Replacing existing ${APP_NAME} in /Applications..."
   rm -rf "$DEST"

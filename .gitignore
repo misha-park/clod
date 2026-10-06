@@ -4,7 +4,6 @@ dist/
 out/
 build/
 release/
-resources/native/
 *.tsbuildinfo
 
 # OS artifacts
@@ -20,9 +19,8 @@ Desktop.ini
 *.swo
 *~
 
-# Claude Code project-scoped settings (local only)
+# Claude Code project-scoped local settings
 .claude/settings.local.json
-CLAUDE.md
 
 # Environment (not needed for core flow, but excluded defensively)
 .env

@@ -316,9 +316,6 @@ function EmptyState() {
         <FolderOpen size={13} />
         Choose folder
       </button>
-      <span className="text-[11px]" style={{ color: colors.textTertiary }}>
-        Press <strong style={{ color: colors.textSecondary }}>⌥ + Space</strong> to show/hide this overlay
-      </span>
     </div>
   )
 }
