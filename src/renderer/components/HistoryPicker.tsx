@@ -35,11 +35,14 @@ export function HistoryPicker() {
     (a, b) => a === b || (!!a && !!b && a.hasChosenDirectory === b.hasChosenDirectory && a.workingDirectory === b.workingDirectory),
   )
   const staticInfo = useSessionStore((s) => s.staticInfo)
+  const defaultDirOverride = useSessionStore((s) => s.defaultDirOverride)
   const popoverLayer = usePopoverLayer()
   const colors = useColors()
+  // Tabs without a chosen folder run in the default folder (clod-scratch unless
+  // overridden), so their sessions are stored there — list from the same place.
   const effectiveProjectPath = activeTab?.hasChosenDirectory
     ? activeTab.workingDirectory
-    : (staticInfo?.homePath || activeTab?.workingDirectory || '~')
+    : (defaultDirOverride || staticInfo?.defaultDir || staticInfo?.homePath || activeTab?.workingDirectory || '~')
 
   const [open, setOpen] = useState(false)
   const [sessions, setSessions] = useState<SessionMeta[]>([])

@@ -558,13 +558,6 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
       const stat = statSync(filePath)
       if (stat.size < 100) continue // skip trivially small files
 
-      // Retention: delete sessions older than 3 days.
-      const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
-      if (stat.mtimeMs < Date.now() - THREE_DAYS_MS) {
-        try { unlinkSync(filePath) } catch {}
-        continue
-      }
-
       // Read lines to extract metadata and validate transcript schema
       const meta: { validated: boolean; slug: string | null; firstMessage: string | null; lastTimestamp: string | null } = {
         validated: false, slug: null, firstMessage: null, lastTimestamp: null,

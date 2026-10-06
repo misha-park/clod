@@ -485,7 +485,7 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   resumeSession: async (sessionId, title, projectPath) => {
-    const defaultDir = projectPath || get().staticInfo?.homePath || '~'
+    const defaultDir = projectPath || get().defaultDirOverride || get().staticInfo?.defaultDir || get().staticInfo?.homePath || '~'
     try {
       const { tabId } = await window.clod.createTab()
 
