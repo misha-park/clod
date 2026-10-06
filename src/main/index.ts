@@ -186,7 +186,10 @@ function createWindow(): void {
   // Belt-and-suspenders: panel already joins all spaces and floats,
   // but explicit flags ensure correct behavior on older Electron builds.
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  mainWindow.setAlwaysOnTop(true, 'screen-saver')
+  // 'floating', not 'screen-saver': macOS does not deliver drag-and-drop to
+  // windows at screen-saver level, which broke dropping folders onto Clod.
+  // The panel's all-spaces/full-screen behaviour keeps it above full-screen apps.
+  mainWindow.setAlwaysOnTop(true, 'floating')
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event) => {
     event.preventDefault()
