@@ -80,7 +80,9 @@ export default function App() {
   }, [setSystemTheme])
 
   useEffect(() => {
-    useSessionStore.getState().initStaticInfo().then(() => {
+    useSessionStore.getState().initStaticInfo().then(async () => {
+      // Reopen the conversations that were open when Clod last quit.
+      if (await useSessionStore.getState().restoreOpenTabs()) return
       const homeDir = useSessionStore.getState().defaultDirOverride || useSessionStore.getState().staticInfo?.defaultDir || useSessionStore.getState().staticInfo?.homePath || '~'
       const tab = useSessionStore.getState().tabs[0]
       if (tab) {

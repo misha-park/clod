@@ -195,6 +195,8 @@ interface State {
   uninstallMarketplacePlugin: (plugin: CatalogPlugin) => Promise<void>
   buildYourOwn: () => void
   resumeSession: (sessionId: string, title?: string, projectPath?: string) => Promise<string>
+  /** Reopen tabs saved from the last launch. Returns true if any were restored. */
+  restoreOpenTabs: () => Promise<boolean>
   addSystemMessage: (content: string) => void
   /** Run a `!` command in the tab's folder; its output joins the next message to Claude. */
   runShellCommand: (command: string) => Promise<void>
@@ -257,6 +259,58 @@ function makeLocalTab(): TabState {
 }
 
 const initialTab = makeLocalTab()
+
+/** Create a main-process tab and load a saved conversation into it. */
+async function buildResumedTab(sessionId: string, title?: string, projectPath?: string): Promise<TabState | null> {
+  const st = useSessionStore.getState()
+  const dir = projectPath || st.defaultDirOverride || st.staticInfo?.defaultDir || st.staticInfo?.homePath || '~'
+  try {
+    const { tabId } = await window.clod.createTab()
+    const history = await window.clod.loadSession(sessionId, dir).catch(() => [])
+    const messages: Message[] = history.map((m) => ({
+      id: nextMsgId(),
+      role: m.role as Message['role'],
+      content: m.content,
+      toolName: m.toolName,
+      toolStatus: m.toolName ? 'completed' as const : undefined,
+      timestamp: m.timestamp,
+    }))
+    return {
+      ...makeLocalTab(),
+      id: tabId,
+      claudeSessionId: sessionId,
+      title: title || 'Resumed Session',
+      workingDirectory: dir,
+      hasChosenDirectory: !!projectPath,
+      messages,
+    }
+  } catch {
+    return null
+  }
+}
+
+// ─── Open tabs, remembered across launches ───
+
+const OPEN_TABS_KEY = 'clod-open-tabs'
+
+interface SavedTabs {
+  tabs: Array<{ sessionId: string; title: string; projectPath: string }>
+  activeSessionId: string | null
+}
+
+function loadSavedTabs(): SavedTabs {
+  try {
+    const p = JSON.parse(localStorage.getItem(OPEN_TABS_KEY) || '{}')
+    const tabs = Array.isArray(p.tabs) ? p.tabs.filter((t: any) =>
+      typeof t?.sessionId === 'string' && typeof t?.projectPath === 'string') : []
+    return { tabs, activeSessionId: typeof p.activeSessionId === 'string' ? p.activeSessionId : null }
+  } catch {
+    return { tabs: [], activeSessionId: null }
+  }
+}
+
+// Read once at launch, before startup state changes overwrite the saved list.
+const savedTabsAtLaunch = loadSavedTabs()
 
 export const useSessionStore = create<State>((set, get) => ({
   tabs: [initialTab],
@@ -501,37 +555,33 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
   },
 
+  restoreOpenTabs: async () => {
+    const saved = savedTabsAtLaunch
+    if (saved.tabs.length === 0) return false
+    const restored: TabState[] = []
+    for (const t of saved.tabs) {
+      const tab = await buildResumedTab(t.sessionId, t.title, t.projectPath)
+      // Skip conversations that no longer exist (e.g. removed by cleanup).
+      if (tab && tab.messages.length > 0) restored.push(tab)
+    }
+    if (restored.length === 0) return false
+    const active = restored.find((t) => t.claudeSessionId === saved.activeSessionId) || restored[restored.length - 1]
+    set({ tabs: restored, activeTabId: active.id })
+    return true
+  },
+
   resumeSession: async (sessionId, title, projectPath) => {
     const defaultDir = projectPath || get().defaultDirOverride || get().staticInfo?.defaultDir || get().staticInfo?.homePath || '~'
     try {
-      const { tabId } = await window.clod.createTab()
-
-      // Load previous conversation messages from the JSONL file
-      const history = await window.clod.loadSession(sessionId, defaultDir).catch(() => [])
-      const messages: Message[] = history.map((m) => ({
-        id: nextMsgId(),
-        role: m.role as Message['role'],
-        content: m.content,
-        toolName: m.toolName,
-        toolStatus: m.toolName ? 'completed' as const : undefined,
-        timestamp: m.timestamp,
-      }))
-
-      const tab: TabState = {
-        ...makeLocalTab(),
-        id: tabId,
-        claudeSessionId: sessionId,
-        title: title || 'Resumed Session',
-        workingDirectory: defaultDir,
-        hasChosenDirectory: !!projectPath,
-        messages,
-      }
+      const tab = await buildResumedTab(sessionId, title, projectPath)
+      if (!tab) throw new Error('could not create tab')
+      const tabId = tab.id
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
         isExpanded: true,
       }))
-      // Don't call initSession — the first real prompt will use --resume with the sessionId
+      // The first message resumes the session (--resume) in a new tab process.
       return tabId
     } catch {
       const tab = makeLocalTab()
@@ -1125,4 +1175,18 @@ onExternalSettingsChange((raw) => {
   if (next.preferredModel !== s.preferredModel) s.setPreferredModel(next.preferredModel as string)
   if (next.permissionMode !== s.permissionMode) s.setPermissionMode(next.permissionMode)
   if (next.defaultDirOverride !== s.defaultDirOverride) s.setDefaultDirOverride(next.defaultDirOverride)
+})
+
+// Remember which conversations are open (only tabs that have one), so the next
+// launch can reopen them. Writes only when the list actually changes.
+let lastSavedTabs = ''
+useSessionStore.subscribe((state) => {
+  const tabs = state.tabs
+    .filter((t) => t.claudeSessionId)
+    .map((t) => ({ sessionId: t.claudeSessionId!, title: t.title, projectPath: t.workingDirectory }))
+  const active = state.tabs.find((t) => t.id === state.activeTabId)?.claudeSessionId ?? null
+  const serialized = JSON.stringify({ tabs, activeSessionId: active })
+  if (serialized === lastSavedTabs) return
+  lastSavedTabs = serialized
+  try { localStorage.setItem(OPEN_TABS_KEY, serialized) } catch {}
 })
