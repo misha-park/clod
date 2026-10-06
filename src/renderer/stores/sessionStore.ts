@@ -787,19 +787,16 @@ export const useSessionStore = create<State>((set, get) => ({
             updated.sessionMcpServers = event.mcpServers
             updated.sessionSkills = event.skills
             updated.sessionVersion = event.version
-            // Don't change status/activity for warmup inits — they're invisible
-            if (!event.isWarmup) {
-              updated.status = 'running'
-              updated.currentActivity = 'Thinking...'
-              // Move the first queued prompt into the timeline (it's now being processed)
-              if (updated.queuedPrompts.length > 0) {
-                const [nextPrompt, ...rest] = updated.queuedPrompts
-                updated.queuedPrompts = rest
-                updated.messages = [
-                  ...updated.messages,
-                  { id: nextMsgId(), role: 'user' as const, content: nextPrompt, timestamp: Date.now() },
-                ]
-              }
+            updated.status = 'running'
+            updated.currentActivity = 'Thinking...'
+            // Move the first queued prompt into the timeline (it's now being processed)
+            if (updated.queuedPrompts.length > 0) {
+              const [nextPrompt, ...rest] = updated.queuedPrompts
+              updated.queuedPrompts = rest
+              updated.messages = [
+                ...updated.messages,
+                { id: nextMsgId(), role: 'user' as const, content: nextPrompt, timestamp: Date.now() },
+              ]
             }
             break
 

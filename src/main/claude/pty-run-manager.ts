@@ -835,22 +835,6 @@ export class PtyRunManager extends EventEmitter {
   }
 
   /**
-   * Write arbitrary data to PTY stdin (for follow-up messages, etc.)
-   */
-  writeToStdin(requestId: string, message: string): boolean {
-    const handle = this.activeRuns.get(requestId)
-    if (!handle) return false
-
-    log(`Writing to PTY stdin [${requestId}]: ${message.substring(0, 200)}`)
-    try {
-      handle.pty.write(message)
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  /**
    * Get an enriched error object for a failed PTY run.
    */
   getEnrichedError(requestId: string, exitCode: number | null): EnrichedError {
@@ -869,14 +853,6 @@ export class PtyRunManager extends EventEmitter {
 
   isRunning(requestId: string): boolean {
     return this.activeRuns.has(requestId)
-  }
-
-  getHandle(requestId: string): PtyRunHandle | undefined {
-    return this.activeRuns.get(requestId)
-  }
-
-  getActiveRunIds(): string[] {
-    return Array.from(this.activeRuns.keys())
   }
 
   private _ringPush(buffer: string[], line: string): void {

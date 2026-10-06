@@ -7,10 +7,7 @@ export interface ClodAPI {
   start(): Promise<{ version: string; auth: { email?: string; subscriptionType?: string; authMethod?: string }; mcpServers: string[]; projectPath: string; homePath: string; defaultDir: string }>
   createTab(): Promise<{ tabId: string }>
   prompt(tabId: string, requestId: string, options: RunOptions): Promise<void>
-  cancel(requestId: string): Promise<boolean>
   stopTab(tabId: string): Promise<boolean>
-  retry(tabId: string, requestId: string, options: RunOptions): Promise<void>
-  status(): Promise<HealthReport>
   tabHealth(): Promise<HealthReport>
   closeTab(tabId: string): Promise<void>
   selectDirectory(): Promise<string | null>
@@ -19,10 +16,7 @@ export interface ClodAPI {
   attachFiles(): Promise<Attachment[] | null>
   takeScreenshot(): Promise<Attachment | null>
   pasteImage(dataUrl: string): Promise<Attachment | null>
-  transcribeAudio(audioBase64: string): Promise<{ error: string | null; transcript: string | null }>
-  getDiagnostics(): Promise<any>
   respondPermission(tabId: string, questionId: string, optionId: string): Promise<boolean>
-  initSession(tabId: string): void
   resetTabSession(tabId: string): void
   listSessions(projectPath?: string): Promise<SessionMeta[]>
   loadSession(sessionId: string, projectPath?: string): Promise<SessionLoadMessage[]>
@@ -35,15 +29,10 @@ export interface ClodAPI {
   setHotkey(mode: 'double-option' | 'accelerator', accelerator: string): void
   copyToClipboard(text: string): void
   setOpenAtLogin(enabled: boolean): void
-  checkAccessibility(): Promise<boolean>
-  openAccessibilitySettings(): Promise<boolean>
   getTheme(): Promise<{ isDark: boolean }>
   onThemeChange(callback: (isDark: boolean) => void): () => void
 
   // ─── Window management ───
-  resizeHeight(height: number): void
-  setWindowWidth(width: number): void
-  animateHeight(from: number, to: number, durationMs: number): Promise<void>
   hideWindow(): void
   isVisible(): Promise<boolean>
   /** OS-level click-through for transparent window regions */
@@ -75,10 +64,7 @@ const api: ClodAPI = {
   start: () => ipcRenderer.invoke(IPC.START),
   createTab: () => ipcRenderer.invoke(IPC.CREATE_TAB),
   prompt: (tabId, requestId, options) => ipcRenderer.invoke(IPC.PROMPT, { tabId, requestId, options }),
-  cancel: (requestId) => ipcRenderer.invoke(IPC.CANCEL, requestId),
   stopTab: (tabId) => ipcRenderer.invoke(IPC.STOP_TAB, tabId),
-  retry: (tabId, requestId, options) => ipcRenderer.invoke(IPC.RETRY, { tabId, requestId, options }),
-  status: () => ipcRenderer.invoke(IPC.STATUS),
   tabHealth: () => ipcRenderer.invoke(IPC.TAB_HEALTH),
   closeTab: (tabId) => ipcRenderer.invoke(IPC.CLOSE_TAB, tabId),
   selectDirectory: () => ipcRenderer.invoke(IPC.SELECT_DIRECTORY),
@@ -87,11 +73,8 @@ const api: ClodAPI = {
   attachFiles: () => ipcRenderer.invoke(IPC.ATTACH_FILES),
   takeScreenshot: () => ipcRenderer.invoke(IPC.TAKE_SCREENSHOT),
   pasteImage: (dataUrl) => ipcRenderer.invoke(IPC.PASTE_IMAGE, dataUrl),
-  transcribeAudio: (audioBase64) => ipcRenderer.invoke(IPC.TRANSCRIBE_AUDIO, audioBase64),
-  getDiagnostics: () => ipcRenderer.invoke(IPC.GET_DIAGNOSTICS),
   respondPermission: (tabId, questionId, optionId) =>
     ipcRenderer.invoke(IPC.RESPOND_PERMISSION, { tabId, questionId, optionId }),
-  initSession: (tabId) => ipcRenderer.send(IPC.INIT_SESSION, tabId),
   resetTabSession: (tabId) => ipcRenderer.send(IPC.RESET_TAB_SESSION, tabId),
   listSessions: (projectPath?: string) => ipcRenderer.invoke(IPC.LIST_SESSIONS, projectPath),
   loadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke(IPC.LOAD_SESSION, { sessionId, projectPath }),
@@ -106,8 +89,6 @@ const api: ClodAPI = {
   setHotkey: (mode, accelerator) => ipcRenderer.send(IPC.SET_HOTKEY, mode, accelerator),
   copyToClipboard: (text) => ipcRenderer.send(IPC.COPY_TO_CLIPBOARD, text),
   setOpenAtLogin: (enabled) => ipcRenderer.send(IPC.SET_OPEN_AT_LOGIN, enabled),
-  checkAccessibility: () => ipcRenderer.invoke(IPC.CHECK_ACCESSIBILITY),
-  openAccessibilitySettings: () => ipcRenderer.invoke(IPC.OPEN_ACCESSIBILITY_SETTINGS),
   getTheme: () => ipcRenderer.invoke(IPC.GET_THEME),
   onThemeChange: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, isDark: boolean) => callback(isDark)
@@ -116,9 +97,6 @@ const api: ClodAPI = {
   },
 
   // ─── Window management ───
-  resizeHeight: (height) => ipcRenderer.send(IPC.RESIZE_HEIGHT, height),
-  animateHeight: (from, to, durationMs) =>
-    ipcRenderer.invoke(IPC.ANIMATE_HEIGHT, { from, to, durationMs }),
   hideWindow: () => ipcRenderer.send(IPC.HIDE_WINDOW),
   isVisible: () => ipcRenderer.invoke(IPC.IS_VISIBLE),
   setIgnoreMouseEvents: (ignore, options) =>
@@ -127,7 +105,6 @@ const api: ClodAPI = {
     ipcRenderer.send(IPC.START_WINDOW_DRAG, deltaX, deltaY),
   resetWindowPosition: () => ipcRenderer.send(IPC.RESET_WINDOW_POSITION),
   setWindowPosition: (pos) => ipcRenderer.send(IPC.SET_WINDOW_POSITION, pos),
-  setWindowWidth: (width) => ipcRenderer.send(IPC.SET_WINDOW_WIDTH, width),
 
   // ─── Event listeners ───
   onEvent: (callback) => {

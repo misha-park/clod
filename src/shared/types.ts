@@ -193,7 +193,7 @@ export interface RunResult {
 // ─── Canonical Events (normalized from raw stream) ───
 
 export type NormalizedEvent =
-  | { type: 'session_init'; sessionId: string; tools: string[]; model: string; mcpServers: Array<{ name: string; status: string }>; skills: string[]; version: string; isWarmup?: boolean }
+  | { type: 'session_init'; sessionId: string; tools: string[]; model: string; mcpServers: Array<{ name: string; status: string }>; skills: string[]; version: string }
   | { type: 'text_chunk'; text: string }
   | { type: 'tool_call'; toolName: string; toolId: string; index: number }
   | { type: 'tool_call_update'; toolId: string; partialInput: string }
@@ -320,10 +320,7 @@ export const IPC = {
   START: 'clod:start',
   CREATE_TAB: 'clod:create-tab',
   PROMPT: 'clod:prompt',
-  CANCEL: 'clod:cancel',
   STOP_TAB: 'clod:stop-tab',
-  RETRY: 'clod:retry',
-  STATUS: 'clod:status',
   TAB_HEALTH: 'clod:tab-health',
   CLOSE_TAB: 'clod:close-tab',
   SELECT_DIRECTORY: 'clod:select-directory',
@@ -331,13 +328,9 @@ export const IPC = {
   OPEN_IN_TERMINAL: 'clod:open-in-terminal',
   ATTACH_FILES: 'clod:attach-files',
   TAKE_SCREENSHOT: 'clod:take-screenshot',
-  TRANSCRIBE_AUDIO: 'clod:transcribe-audio',
   PASTE_IMAGE: 'clod:paste-image',
-  GET_DIAGNOSTICS: 'clod:get-diagnostics',
   RESPOND_PERMISSION: 'clod:respond-permission',
-  INIT_SESSION: 'clod:init-session',
   RESET_TAB_SESSION: 'clod:reset-tab-session',
-  ANIMATE_HEIGHT: 'clod:animate-height',
   LIST_SESSIONS: 'clod:list-sessions',
   LOAD_SESSION: 'clod:load-session',
   DELETE_SESSION: 'clod:delete-session',
@@ -355,8 +348,6 @@ export const IPC = {
   RATE_LIMIT: 'clod:rate-limit',
 
   // Window management
-  RESIZE_HEIGHT: 'clod:resize-height',
-  SET_WINDOW_WIDTH: 'clod:set-window-width',
   HIDE_WINDOW: 'clod:hide-window',
   WINDOW_SHOWN: 'clod:window-shown',
   SET_IGNORE_MOUSE_EVENTS: 'clod:set-ignore-mouse-events',
@@ -399,11 +390,6 @@ export const IPC = {
   SET_OPEN_AT_LOGIN: 'clod:set-open-at-login',
 
   // Accessibility permission (needed by the double-tap Option key hook)
-  CHECK_ACCESSIBILITY: 'clod:check-accessibility',
-  OPEN_ACCESSIBILITY_SETTINGS: 'clod:open-accessibility-settings',
 
   // Legacy (kept for backward compat during migration)
-  STREAM_EVENT: 'clod:stream-event',
-  RUN_COMPLETE: 'clod:run-complete',
-  RUN_ERROR: 'clod:run-error',
 } as const

@@ -380,14 +380,6 @@ export class RunManager extends EventEmitter {
     return this.activeRuns.has(requestId)
   }
 
-  getHandle(requestId: string): RunHandle | undefined {
-    return this.activeRuns.get(requestId)
-  }
-
-  getActiveRunIds(): string[] {
-    return Array.from(this.activeRuns.keys())
-  }
-
   private _ringPush(buffer: string[], line: string): void {
     buffer.push(line)
     if (buffer.length > MAX_RING_LINES) {

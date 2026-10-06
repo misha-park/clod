@@ -318,22 +318,6 @@ function toggleWindow(source = 'unknown'): void {
   }
 }
 
-// ─── Resize ───
-// Fixed-height mode: ignore renderer resize events to prevent jank.
-// The native window stays at PILL_HEIGHT; all expand/collapse happens inside the renderer.
-
-ipcMain.on(IPC.RESIZE_HEIGHT, () => {
-  // No-op — fixed height window, no dynamic resize
-})
-
-ipcMain.on(IPC.SET_WINDOW_WIDTH, () => {
-  // No-op — native width is fixed to keep expand/collapse animation smooth.
-})
-
-ipcMain.handle(IPC.ANIMATE_HEIGHT, () => {
-  // No-op — kept for API compat, animation handled purely in renderer
-})
-
 ipcMain.on(IPC.HIDE_WINDOW, () => {
   mainWindow?.hide()
 })
@@ -504,11 +488,6 @@ ipcMain.handle(IPC.CREATE_TAB, () => {
   return { tabId }
 })
 
-ipcMain.on(IPC.INIT_SESSION, (_event, tabId: string) => {
-  log(`IPC INIT_SESSION: ${tabId}`)
-  controlPlane.initSession(tabId)
-})
-
 ipcMain.on(IPC.RESET_TAB_SESSION, (_event, tabId: string) => {
   log(`IPC RESET_TAB_SESSION: ${tabId}`)
   controlPlane.resetTabSession(tabId)
@@ -537,23 +516,9 @@ ipcMain.handle(IPC.PROMPT, async (_event, { tabId, requestId, options }: { tabId
   }
 })
 
-ipcMain.handle(IPC.CANCEL, (_event, requestId: string) => {
-  log(`IPC CANCEL: ${requestId}`)
-  return controlPlane.cancel(requestId)
-})
-
 ipcMain.handle(IPC.STOP_TAB, (_event, tabId: string) => {
   log(`IPC STOP_TAB: ${tabId}`)
   return controlPlane.cancelTab(tabId)
-})
-
-ipcMain.handle(IPC.RETRY, async (_event, { tabId, requestId, options }: { tabId: string; requestId: string; options: RunOptions }) => {
-  log(`IPC RETRY: tab=${tabId} req=${requestId}`)
-  return controlPlane.retry(tabId, requestId, options)
-})
-
-ipcMain.handle(IPC.STATUS, () => {
-  return controlPlane.getHealth()
 })
 
 ipcMain.handle(IPC.TAB_HEALTH, () => {
@@ -572,31 +537,6 @@ ipcMain.on(IPC.SET_PERMISSION_MODE, (_event, mode: string) => {
   }
   log(`IPC SET_PERMISSION_MODE: ${mode}`)
   controlPlane.setPermissionMode(mode)
-})
-
-// Accessibility permission — required by the uiohook key hook for double-tap Option.
-ipcMain.handle(IPC.CHECK_ACCESSIBILITY, () => {
-  if (process.platform !== 'darwin') return true
-  try {
-    return systemPreferences.isTrustedAccessibilityClient(false)
-  } catch (err: any) {
-    log(`IPC CHECK_ACCESSIBILITY failed: ${err.message}`)
-    return false
-  }
-})
-
-ipcMain.handle(IPC.OPEN_ACCESSIBILITY_SETTINGS, async () => {
-  if (process.platform !== 'darwin') return false
-  try {
-    // Trigger the system prompt (adds the app to the list if not present)...
-    systemPreferences.isTrustedAccessibilityClient(true)
-    // ...and open the Accessibility pane directly.
-    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
-    return true
-  } catch (err: any) {
-    log(`IPC OPEN_ACCESSIBILITY_SETTINGS failed: ${err.message}`)
-    return false
-  }
 })
 
 ipcMain.handle(IPC.RESPOND_PERMISSION, (_event, { tabId, questionId, optionId }: { tabId: string; questionId: string; optionId: string }) => {
@@ -977,237 +917,6 @@ ipcMain.handle(IPC.PASTE_IMAGE, async (_event, dataUrl: string) => {
     }
   } catch {
     return null
-  }
-})
-
-ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
-  const { writeFileSync, existsSync, unlinkSync, readFileSync } = require('fs')
-  const { execFile } = require('child_process')
-  const { join, basename } = require('path')
-  const { tmpdir } = require('os')
-
-  const startedAt = Date.now()
-  const phaseMs: Record<string, number> = {}
-  const mark = (name: string, t0: number) => { phaseMs[name] = Date.now() - t0 }
-
-  const tmpWav = join(tmpdir(), `clod-voice-${Date.now()}.wav`)
-  try {
-    const runExecFile = (bin: string, args: string[], timeout: number): Promise<string> =>
-      new Promise((resolve, reject) => {
-        execFile(bin, args, { encoding: 'utf-8', timeout }, (err: any, stdout: string, stderr: string) => {
-          if (err) {
-            const detail = stderr?.trim() || stdout?.trim() || err.message
-            reject(new Error(detail))
-            return
-          }
-          resolve(stdout || '')
-        })
-      })
-
-    let t0 = Date.now()
-    const buf = Buffer.from(audioBase64, 'base64')
-    writeFileSync(tmpWav, buf)
-    mark('decode+write_wav', t0)
-
-    // Find whisper backend in priority order: whisperkit-cli (Apple Silicon CoreML) → whisper-cli (whisper-cpp) → whisper (python)
-    t0 = Date.now()
-    const candidates = [
-      '/opt/homebrew/bin/whisperkit-cli',
-      '/usr/local/bin/whisperkit-cli',
-      '/opt/homebrew/bin/whisper-cli',
-      '/usr/local/bin/whisper-cli',
-      '/opt/homebrew/bin/whisper',
-      '/usr/local/bin/whisper',
-      join(homedir(), '.local/bin/whisper'),
-    ]
-
-    let whisperBin = ''
-    for (const c of candidates) {
-      if (existsSync(c)) { whisperBin = c; break }
-    }
-    mark('probe_binary_paths', t0)
-
-    if (!whisperBin) {
-      t0 = Date.now()
-      for (const name of ['whisperkit-cli', 'whisper-cli', 'whisper']) {
-        try {
-          whisperBin = await runExecFile('/bin/zsh', ['-lc', `whence -p ${name}`], 5000).then((s) => s.trim())
-          if (whisperBin) break
-        } catch {}
-      }
-      mark('probe_binary_whence', t0)
-    }
-
-    if (!whisperBin) {
-      const hint = process.arch === 'arm64'
-        ? 'brew install whisperkit-cli   (or: brew install whisper-cpp)'
-        : 'brew install whisper-cpp'
-      return {
-        error: `Whisper not found. Install with:\n  ${hint}`,
-        transcript: null,
-      }
-    }
-
-    const isWhisperKit = whisperBin.includes('whisperkit-cli')
-    const isWhisperCpp = !isWhisperKit && whisperBin.includes('whisper-cli')
-
-    log(`Transcribing with: ${whisperBin} (backend: ${isWhisperKit ? 'WhisperKit' : isWhisperCpp ? 'whisper-cpp' : 'Python whisper'})`)
-
-    let output: string
-    if (isWhisperKit) {
-      // WhisperKit (Apple Silicon CoreML) — auto-downloads models on first run
-      // Use --report to produce a JSON file with a top-level "text" field for deterministic parsing
-      const reportDir = tmpdir()
-      t0 = Date.now()
-      output = await runExecFile(
-        whisperBin,
-        ['transcribe', '--audio-path', tmpWav, '--model', 'tiny', '--without-timestamps', '--skip-special-tokens', '--report', '--report-path', reportDir],
-        60000
-      )
-      mark('whisperkit_transcribe_report', t0)
-
-      // WhisperKit writes <audioFileName>.json (filename without extension)
-      const wavBasename = basename(tmpWav, '.wav')
-      const reportPath = join(reportDir, `${wavBasename}.json`)
-      if (existsSync(reportPath)) {
-        try {
-          t0 = Date.now()
-          const report = JSON.parse(readFileSync(reportPath, 'utf-8'))
-          const transcript = (report.text || '').trim()
-          mark('whisperkit_parse_report_json', t0)
-          try { unlinkSync(reportPath) } catch {}
-          // Also clean up .srt that --report creates
-          const srtPath = join(reportDir, `${wavBasename}.srt`)
-          try { unlinkSync(srtPath) } catch {}
-          log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-          return { error: null, transcript }
-        } catch (parseErr: any) {
-          log(`WhisperKit JSON parse failed: ${parseErr.message}, falling back to stdout`)
-          try { unlinkSync(reportPath) } catch {}
-        }
-      }
-
-      // Performance fallback: avoid a second full transcription if report file is missing/invalid.
-      // Use stdout from the first run to keep latency close to pre-report behavior.
-      if (!output || !output.trim()) {
-        t0 = Date.now()
-        output = await runExecFile(
-          whisperBin,
-          ['transcribe', '--audio-path', tmpWav, '--model', 'tiny', '--without-timestamps', '--skip-special-tokens'],
-          60000
-        )
-        mark('whisperkit_transcribe_stdout_rerun', t0)
-      }
-    } else if (isWhisperCpp) {
-      // whisper-cpp: whisper-cli -m model -f file --no-timestamps
-      // Find model file — prefer multilingual (auto-detect language) over .en (English-only)
-      const modelCandidates = [
-        join(homedir(), '.local/share/whisper/ggml-base.bin'),
-        join(homedir(), '.local/share/whisper/ggml-tiny.bin'),
-        '/opt/homebrew/share/whisper-cpp/models/ggml-base.bin',
-        '/opt/homebrew/share/whisper-cpp/models/ggml-tiny.bin',
-        join(homedir(), '.local/share/whisper/ggml-base.en.bin'),
-        join(homedir(), '.local/share/whisper/ggml-tiny.en.bin'),
-        '/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin',
-        '/opt/homebrew/share/whisper-cpp/models/ggml-tiny.en.bin',
-      ]
-
-      let modelPath = ''
-      for (const m of modelCandidates) {
-        if (existsSync(m)) { modelPath = m; break }
-      }
-
-      if (!modelPath) {
-        return {
-          error: 'Whisper model not found. Download with:\n  mkdir -p ~/.local/share/whisper && curl -L -o ~/.local/share/whisper/ggml-tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
-          transcript: null,
-        }
-      }
-
-      const isEnglishOnly = modelPath.includes('.en.')
-      const langFlag = isEnglishOnly ? '-l en' : '-l auto'
-      t0 = Date.now()
-      output = await runExecFile(
-        whisperBin,
-        ['-m', modelPath, '-f', tmpWav, '--no-timestamps', '-l', isEnglishOnly ? 'en' : 'auto'],
-        30000
-      )
-      mark('whisper_cpp_transcribe', t0)
-    } else {
-      // Python whisper
-      t0 = Date.now()
-      output = await runExecFile(
-        whisperBin,
-        [tmpWav, '--model', 'tiny', '--output_format', 'txt', '--output_dir', tmpdir()],
-        30000
-      )
-      mark('python_whisper_transcribe', t0)
-      // Python whisper writes .txt file
-      const txtPath = tmpWav.replace('.wav', '.txt')
-      if (existsSync(txtPath)) {
-        t0 = Date.now()
-        const transcript = readFileSync(txtPath, 'utf-8').trim()
-        mark('python_whisper_read_txt', t0)
-        try { unlinkSync(txtPath) } catch {}
-        log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-        return { error: null, transcript }
-      }
-      // File not created — Python whisper failed silently
-      return {
-        error: `Whisper output file not found at ${txtPath}. Check disk space and permissions.`,
-        transcript: null,
-      }
-    }
-
-    // WhisperKit (stdout fallback) and whisper-cpp print to stdout directly
-    // Strip timestamp patterns and known hallucination outputs
-    const HALLUCINATIONS = /^\s*(\[BLANK_AUDIO\]|you\.?|thank you\.?|thanks\.?)\s*$/i
-    const transcript = output
-      .replace(/\[[\d:.]+\s*-->\s*[\d:.]+\]\s*/g, '')
-      .trim()
-
-    if (HALLUCINATIONS.test(transcript)) {
-      log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-      return { error: null, transcript: '' }
-    }
-
-    log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-    return { error: null, transcript: transcript || '' }
-  } catch (err: any) {
-    log(`Transcription error: ${err.message}`)
-    log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt, failed: true })}`)
-    return {
-      error: `Transcription failed: ${err.message}`,
-      transcript: null,
-    }
-  } finally {
-    try { unlinkSync(tmpWav) } catch {}
-  }
-})
-
-ipcMain.handle(IPC.GET_DIAGNOSTICS, () => {
-  const { readFileSync, existsSync } = require('fs')
-  const health = controlPlane.getHealth()
-
-  let recentLogs = ''
-  if (existsSync(LOG_FILE)) {
-    try {
-      const content = readFileSync(LOG_FILE, 'utf-8')
-      const lines = content.split('\n')
-      recentLogs = lines.slice(-100).join('\n')
-    } catch {}
-  }
-
-  return {
-    health,
-    logPath: LOG_FILE,
-    recentLogs,
-    platform: process.platform,
-    arch: process.arch,
-    electronVersion: process.versions.electron,
-    nodeVersion: process.versions.node,
-    appVersion: app.getVersion(),
-    transport: INTERACTIVE_PTY ? 'pty' : 'stream-json',
   }
 })
 

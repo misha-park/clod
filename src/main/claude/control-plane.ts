@@ -66,7 +66,6 @@ export class ControlPlane extends EventEmitter {
   /** Tracks which runs are using PTY transport (by requestId) */
   private ptyRuns = new Set<string>()
   /** Tracks requestIds that are warmup init requests (invisible to renderer) */
-  private initRequestIds = new Set<string>()
   /** Permission hook server for PreToolUse HTTP hooks */
   private permissionServer: PermissionServer
   /** Per-run tokens: requestId → runToken (for cleanup on exit/error) */
@@ -149,20 +148,9 @@ export class ControlPlane extends EventEmitter {
       if (event.type === 'session_init') {
         tab.claudeSessionId = event.sessionId
 
-        if (this.initRequestIds.has(requestId)) {
-          // Warmup init — emit session_init with isWarmup flag, don't change status
-          this.emit('event', tabId, { ...event, isWarmup: true })
-          return
-        }
-
         if (tab.status === 'connecting') {
           this._setTabStatus(tabId, 'running')
         }
-      }
-
-      // Suppress all events from init requests (session_init already handled above)
-      if (this.initRequestIds.has(requestId)) {
-        return
       }
 
       this.emit('event', tabId, event)
@@ -197,18 +185,6 @@ export class ControlPlane extends EventEmitter {
       tab.runPid = null
 
       if (sessionId) tab.claudeSessionId = sessionId
-
-      // Init request: silently transition to idle
-      if (this.initRequestIds.has(requestId)) {
-        this.initRequestIds.delete(requestId)
-        this._setTabStatus(tabId, 'idle')
-        if (inflight) {
-          inflight.resolve()
-          this.inflightRequests.delete(requestId)
-        }
-        this._processQueue(tabId)
-        return
-      }
 
       if (code === 0) {
         this._setTabStatus(tabId, 'completed')
@@ -257,19 +233,6 @@ export class ControlPlane extends EventEmitter {
       tab.activeRequestId = null
       tab.runPid = null
 
-      // Init request: silently fail, go idle so user can still use the tab
-      if (this.initRequestIds.has(requestId)) {
-        this.initRequestIds.delete(requestId)
-        log(`Init session error for tab ${tabId}: ${err.message}`)
-        this._setTabStatus(tabId, 'idle')
-        if (inflight) {
-          inflight.reject(err)
-          this.inflightRequests.delete(requestId)
-        }
-        this._processQueue(tabId)
-        return
-      }
-
       this._setTabStatus(tabId, 'dead')
 
       // Use enriched diagnostics — _finishedRuns holds the handle with
@@ -303,18 +266,10 @@ export class ControlPlane extends EventEmitter {
       if (event.type === 'session_init') {
         tab.claudeSessionId = event.sessionId
 
-        if (this.initRequestIds.has(requestId)) {
-          this.emit('event', tabId, { ...event, isWarmup: true })
-          return
-        }
-
         if (tab.status === 'connecting') {
           this._setTabStatus(tabId, 'running')
         }
       }
-
-      // Suppress events from init requests
-      if (this.initRequestIds.has(requestId)) return
 
       this.emit('event', tabId, event)
     })
@@ -346,17 +301,6 @@ export class ControlPlane extends EventEmitter {
       tab.activeRequestId = null
       tab.runPid = null
       if (sessionId) tab.claudeSessionId = sessionId
-
-      if (this.initRequestIds.has(requestId)) {
-        this.initRequestIds.delete(requestId)
-        this._setTabStatus(tabId, 'idle')
-        if (inflight) {
-          inflight.resolve()
-          this.inflightRequests.delete(requestId)
-        }
-        this._processQueue(tabId)
-        return
-      }
 
       if (code === 0) {
         this._setTabStatus(tabId, 'completed')
@@ -402,18 +346,6 @@ export class ControlPlane extends EventEmitter {
       tab.activeRequestId = null
       tab.runPid = null
 
-      if (this.initRequestIds.has(requestId)) {
-        this.initRequestIds.delete(requestId)
-        log(`PTY init session error for tab ${tabId}: ${err.message}`)
-        this._setTabStatus(tabId, 'idle')
-        if (inflight) {
-          inflight.reject(err)
-          this.inflightRequests.delete(requestId)
-        }
-        this._processQueue(tabId)
-        return
-      }
-
       this._setTabStatus(tabId, 'dead')
 
       const enriched = this.ptyRunManager.getEnrichedError(requestId, null)
@@ -444,27 +376,6 @@ export class ControlPlane extends EventEmitter {
     this.tabs.set(tabId, entry)
     log(`Tab created: ${tabId}`)
     return tabId
-  }
-
-  /**
-   * Eagerly initialize a session for a tab by running a minimal prompt.
-   * Populates session metadata (model, MCP servers, tools) without visible messages.
-   */
-  initSession(tabId: string): void {
-    const tab = this.tabs.get(tabId)
-    if (!tab) return
-
-    const requestId = `init-${tabId}`
-    this.initRequestIds.add(requestId)
-
-    this.submitPrompt(tabId, requestId, {
-      prompt: 'hi',
-      projectPath: process.cwd(),
-      maxTurns: 1,
-    }).catch((err) => {
-      this.initRequestIds.delete(requestId)
-      log(`Init session failed for tab ${tabId}: ${(err as Error).message}`)
-    })
   }
 
   /**
@@ -610,7 +521,7 @@ export class ControlPlane extends EventEmitter {
     options = { ...options, permissionMode: this.permissionMode }
 
     tab.activeRequestId = requestId
-    if (!this.initRequestIds.has(requestId)) tab.promptCount++
+    tab.promptCount++
     tab.lastActivityAt = Date.now()
 
     // Set status to connecting (first run) or running (subsequent)
@@ -686,23 +597,6 @@ export class ControlPlane extends EventEmitter {
 
   // ─── Retry ───
 
-  /**
-   * Retry: re-submit the same prompt on the same tab/session.
-   * If the tab is dead, creates a fresh session.
-   */
-  async retry(tabId: string, requestId: string, options: RunOptions): Promise<void> {
-    const tab = this.tabs.get(tabId)
-    if (!tab) throw new Error(`Tab ${tabId} does not exist`)
-
-    // If dead, clear session so a new one starts
-    if (tab.status === 'dead') {
-      tab.claudeSessionId = null
-      this._setTabStatus(tabId, 'idle')
-    }
-
-    return this.submitPrompt(tabId, requestId, options)
-  }
-
   // ─── Permission Response ───
 
   respondToPermission(tabId: string, questionId: string, optionId: string): boolean {
@@ -756,17 +650,6 @@ export class ControlPlane extends EventEmitter {
       tabs: tabEntries,
       queueDepth: this.requestQueue.length,
     }
-  }
-
-  getTabStatus(tabId: string): TabRegistryEntry | undefined {
-    return this.tabs.get(tabId)
-  }
-
-  getEnrichedError(requestId: string, exitCode: number | null): EnrichedError {
-    if (this.ptyRuns.has(requestId)) {
-      return this.ptyRunManager.getEnrichedError(requestId, exitCode)
-    }
-    return this.runManager.getEnrichedError(requestId, exitCode)
   }
 
   // ─── Queue Processing ───
