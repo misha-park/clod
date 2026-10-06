@@ -446,24 +446,18 @@ ipcMain.on(IPC.SET_OPEN_AT_LOGIN, (_event, enabled: boolean) => {
 
 ipcMain.handle(IPC.START, async () => {
   log('IPC START — fetching static CLI info')
-  const { execSync } = require('child_process')
+  // Run the CLI queries asynchronously and in parallel: synchronous calls here
+  // froze the main process (and so the overlay) at every launch.
+  const { execFile } = require('child_process')
+  const runCli = (args: string[]): Promise<string> => new Promise((resolve) => {
+    execFile('claude', args, { encoding: 'utf-8', timeout: 5000, env: getCliEnv() },
+      (err: Error | null, stdout: string) => resolve(err ? '' : String(stdout).trim()))
+  })
+  const [versionOut, authOut] = await Promise.all([runCli(['-v']), runCli(['auth', 'status'])])
 
-  let version = 'unknown'
-  try {
-    version = execSync('claude -v', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
-  } catch {}
-
+  const version = versionOut || 'unknown'
   let auth: { email?: string; subscriptionType?: string; authMethod?: string } = {}
-  try {
-    const raw = execSync('claude auth status', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
-    auth = JSON.parse(raw)
-  } catch {}
-
-  let mcpServers: string[] = []
-  try {
-    const raw = execSync('claude mcp list', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
-    if (raw) mcpServers = raw.split('\n').filter(Boolean)
-  } catch {}
+  try { auth = JSON.parse(authOut) } catch {}
 
   // Default working directory for new chats: a dedicated scratch folder so
   // quick questions never touch a real project. Created on demand (self-healing).
@@ -476,7 +470,7 @@ ipcMain.handle(IPC.START, async () => {
     defaultDir = home
   }
 
-  return { version, auth, mcpServers, projectPath: process.cwd(), homePath: home, defaultDir }
+  return { version, auth, projectPath: process.cwd(), homePath: home, defaultDir }
 })
 
 ipcMain.handle(IPC.CREATE_TAB, () => {

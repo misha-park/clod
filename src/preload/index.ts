@@ -4,7 +4,7 @@ import type { RunOptions, NormalizedEvent, HealthReport, EnrichedError, Attachme
 
 export interface ClodAPI {
   // ─── Request-response (renderer → main) ───
-  start(): Promise<{ version: string; auth: { email?: string; subscriptionType?: string; authMethod?: string }; mcpServers: string[]; projectPath: string; homePath: string; defaultDir: string }>
+  start(): Promise<{ version: string; auth: { email?: string; subscriptionType?: string; authMethod?: string }; projectPath: string; homePath: string; defaultDir: string }>
   createTab(): Promise<{ tabId: string }>
   prompt(tabId: string, requestId: string, options: RunOptions): Promise<void>
   stopTab(tabId: string): Promise<boolean>
