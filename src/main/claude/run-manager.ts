@@ -10,6 +10,9 @@ import { getCliEnv } from '../cli-env'
 import type { ClaudeEvent, RunOptions, EnrichedError } from '../../shared/types'
 
 const MAX_RING_LINES = 100
+
+/** Idle tab processes are shut down after this long, to free their memory. */
+export const IDLE_PROCESS_TIMEOUT_MS = Number(process.env.CLOD_IDLE_PROCESS_TIMEOUT_MS) || 10 * 60 * 1000
 const DEBUG = process.env.CLOD_DEBUG === '1'
 
 // Appended to Claude's default system prompt so it knows it's running inside CLOD.
@@ -80,17 +83,41 @@ export interface RunHandle {
 }
 
 /**
- * RunManager: spawns one `claude -p` process per run, parses NDJSON,
- * emits normalized events, handles cancel, and keeps diagnostic ring buffers.
+ * A tab's long-lived `claude` process. Between messages it waits on stdin, so
+ * the next message skips process startup. `handle.runId` is the request it is
+ * currently serving (null while idle).
+ */
+interface TabProcess {
+  procId: string
+  tabId: string
+  /** Options that must match for the process to be reused */
+  configKey: string
+  handle: RunHandle
+  currentRequestId: string | null
+  idleTimer: ReturnType<typeof setTimeout> | null
+}
+
+/**
+ * RunManager: runs `claude -p` with stream-json I/O, parses NDJSON, emits
+ * normalized events, handles cancel, and keeps diagnostic ring buffers.
+ *
+ * Each tab keeps one process alive between messages (stdin stays open) and
+ * reuses it while its configuration matches; idle processes exit after
+ * IDLE_PROCESS_TIMEOUT_MS. A fresh process resumes the session with --resume.
  *
  * Events emitted:
  *  - 'normalized' (runId, NormalizedEvent)
  *  - 'raw' (runId, ClaudeEvent)  — for logging/debugging
- *  - 'exit' (runId, code, signal, sessionId)
+ *  - 'complete' (runId, sessionId) — run finished successfully; process stays alive
+ *  - 'exit' (runId, code, signal, sessionId) — process ended during a run
  *  - 'error' (runId, Error)
+ *  - 'process-ended' (procId) — a tab process has gone (any reason)
  */
 export class RunManager extends EventEmitter {
+  /** requestId → handle of the process currently serving it */
   private activeRuns = new Map<string, RunHandle>()
+  /** tabId → its live process */
+  private tabProcs = new Map<string, TabProcess>()
   /** Holds recently-finished runs so diagnostics survive past process exit */
   private _finishedRuns = new Map<string, RunHandle>()
   private claudeBinary: string
@@ -136,7 +163,93 @@ export class RunManager extends EventEmitter {
     return env
   }
 
-  startRun(requestId: string, options: RunOptions): RunHandle {
+  /** Settings that must be identical for a process to serve another message. */
+  private _configKey(options: RunOptions): string {
+    return JSON.stringify({
+      cwd: options.projectPath,
+      model: options.model || null,
+      permissionMode: options.permissionMode || null,
+      addDirs: options.addDirs || [],
+      allowedTools: options.allowedTools || [],
+      maxTurns: options.maxTurns || null,
+      maxBudgetUsd: options.maxBudgetUsd || null,
+      systemPrompt: options.systemPrompt || null,
+    })
+  }
+
+  /** Whether the tab's live process can take this message (same config, same session, idle). */
+  canReuse(tabId: string, options: RunOptions): boolean {
+    const proc = this.tabProcs.get(tabId)
+    return !!proc
+      && proc.currentRequestId === null
+      && proc.handle.process.exitCode === null
+      && !!proc.handle.process.stdin && !proc.handle.process.stdin.destroyed
+      && proc.configKey === this._configKey(options)
+      && !!options.sessionId && proc.handle.sessionId === options.sessionId
+  }
+
+  /**
+   * Start a run for a tab: reuse its idle process when possible, otherwise
+   * replace it with a new one. Returns the handle and the serving process id.
+   */
+  startRun(requestId: string, options: RunOptions, tabId: string): { handle: RunHandle; procId: string; reused: boolean } {
+    if (this.canReuse(tabId, options)) {
+      const proc = this.tabProcs.get(tabId)!
+      if (proc.idleTimer) { clearTimeout(proc.idleTimer); proc.idleTimer = null }
+      this._beginRequest(proc, requestId)
+      log(`Reusing PID ${proc.handle.pid} for run ${requestId}`)
+      this._writePrompt(proc.handle, options)
+      return { handle: proc.handle, procId: proc.procId, reused: true }
+    }
+    // Config or session changed (or no live process): replace it.
+    this.endTab(tabId)
+    const proc = this._spawn(requestId, options, tabId)
+    return { handle: proc.handle, procId: proc.procId, reused: false }
+  }
+
+  private _beginRequest(proc: TabProcess, requestId: string): void {
+    const h = proc.handle
+    proc.currentRequestId = requestId
+    h.runId = requestId
+    h.startedAt = Date.now()
+    h.toolCallCount = 0
+    h.sawPermissionRequest = false
+    h.permissionDenials = []
+    this.activeRuns.set(requestId, h)
+  }
+
+  private _writePrompt(handle: RunHandle, options: RunOptions): void {
+    const userMessage = JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: buildUserContent(options.prompt, options.images) },
+    })
+    handle.process.stdin!.write(userMessage + '\n')
+  }
+
+  /** Shut down a tab's process (tab closed, folder or session changed). */
+  endTab(tabId: string): void {
+    const proc = this.tabProcs.get(tabId)
+    if (!proc) return
+    if (proc.idleTimer) { clearTimeout(proc.idleTimer); proc.idleTimer = null }
+    this.tabProcs.delete(tabId)
+    log(`Ending process for tab ${tabId.substring(0, 8)}… (PID ${proc.handle.pid})`)
+    if (proc.currentRequestId) {
+      this.cancel(proc.currentRequestId)
+    } else {
+      try { proc.handle.process.stdin?.end() } catch {}
+      // Fallback if it doesn't exit on EOF.
+      setTimeout(() => {
+        if (proc.handle.process.exitCode === null) proc.handle.process.kill('SIGTERM')
+      }, 5000)
+    }
+  }
+
+  /** Shut down every tab process (app quit). */
+  endAll(): void {
+    for (const tabId of Array.from(this.tabProcs.keys())) this.endTab(tabId)
+  }
+
+  private _spawn(requestId: string, options: RunOptions, tabId: string): TabProcess {
     const cwd = options.projectPath === '~' ? homedir() : options.projectPath
 
     const args: string[] = [
@@ -222,6 +335,18 @@ export class RunManager extends EventEmitter {
       sawPermissionRequest: false,
       permissionDenials: [],
     }
+    const proc: TabProcess = {
+      procId: crypto.randomUUID(),
+      tabId,
+      configKey: this._configKey(options),
+      handle,
+      currentRequestId: null,
+      idleTimer: null,
+    }
+    this.tabProcs.set(tabId, proc)
+    this._beginRequest(proc, requestId)
+    // The request currently being served — events are attributed to it.
+    const current = () => proc.currentRequestId
 
     // ─── stdout → NDJSON parser → normalizer → events ───
     const parser = StreamParser.fromStream(child.stdout!)
@@ -231,6 +356,9 @@ export class RunManager extends EventEmitter {
       if (raw.type === 'system' && 'subtype' in raw && raw.subtype === 'init') {
         handle.sessionId = (raw as any).session_id
       }
+
+      const requestId = current()
+      if (!requestId) return // stray output while idle
 
       // Track permission_request events
       if (raw.type === 'permission_request' || (raw.type === 'system' && 'subtype' in raw && (raw as any).subtype === 'permission_request')) {
@@ -263,16 +391,29 @@ export class RunManager extends EventEmitter {
         this.emit('normalized', requestId, evt)
       }
 
-      // Close stdin after result event — with stream-json input the process
-      // stays alive waiting for more input; closing stdin triggers clean exit.
+      // After the result, keep the process for the tab's next message — unless
+      // the run failed, in which case close stdin so it exits and the exit path
+      // reports the error with diagnostics, as before.
       if (raw.type === 'result') {
         log(`Run complete [${requestId}]: sawPermissionRequest=${handle.sawPermissionRequest}, denials=${handle.permissionDenials.length}`)
-        try { child.stdin?.end() } catch {}
+        if ((raw as any).is_error || this.tabProcs.get(tabId) !== proc) {
+          try { child.stdin?.end() } catch {}
+          return
+        }
+        proc.currentRequestId = null
+        this.activeRuns.delete(requestId)
+        this._finishedRuns.set(requestId, { ...handle })
+        setTimeout(() => this._finishedRuns.delete(requestId), 5000)
+        proc.idleTimer = setTimeout(() => {
+          log(`Tab process idle for ${IDLE_PROCESS_TIMEOUT_MS / 60000} min — shutting down (PID ${handle.pid})`)
+          this.endTab(tabId)
+        }, IDLE_PROCESS_TIMEOUT_MS)
+        this.emit('complete', requestId, handle.sessionId)
       }
     })
 
     parser.on('parse-error', (line: string) => {
-      log(`Parse error [${requestId}]: ${line.substring(0, 200)}`)
+      log(`Parse error [${current() ?? 'idle'}]: ${line.substring(0, 200)}`)
       this._ringPush(handle.stderrTail, `[parse-error] ${line.substring(0, 200)}`)
     })
 
@@ -283,13 +424,23 @@ export class RunManager extends EventEmitter {
       for (const line of lines) {
         this._ringPush(handle.stderrTail, line)
       }
-      log(`Stderr [${requestId}]: ${data.trim().substring(0, 500)}`)
+      log(`Stderr [${current() ?? 'idle'}]: ${data.trim().substring(0, 500)}`)
     })
 
     // ─── Process lifecycle ───
     // Snapshot diagnostics BEFORE deleting the handle so callers can still read them.
+    const detach = () => {
+      if (proc.idleTimer) { clearTimeout(proc.idleTimer); proc.idleTimer = null }
+      if (this.tabProcs.get(tabId) === proc) this.tabProcs.delete(tabId)
+      this.emit('process-ended', proc.procId)
+    }
+
     child.on('close', (code, signal) => {
-      log(`Process closed [${requestId}]: code=${code} signal=${signal}`)
+      const requestId = current()
+      log(`Process closed [${requestId ?? 'idle'}]: PID ${handle.pid} code=${code} signal=${signal}`)
+      detach()
+      if (!requestId) return // idle shutdown — no run to report
+      proc.currentRequestId = null
       // Move handle to finished map so getEnrichedError still works after exit
       this._finishedRuns.set(requestId, handle)
       this.activeRuns.delete(requestId)
@@ -299,27 +450,20 @@ export class RunManager extends EventEmitter {
     })
 
     child.on('error', (err) => {
-      log(`Process error [${requestId}]: ${err.message}`)
+      const requestId = current()
+      log(`Process error [${requestId ?? 'idle'}]: ${err.message}`)
+      detach()
+      if (!requestId) return
+      proc.currentRequestId = null
       this._finishedRuns.set(requestId, handle)
       this.activeRuns.delete(requestId)
       this.emit('error', requestId, err)
       setTimeout(() => this._finishedRuns.delete(requestId), 5000)
     })
 
-    // ─── Write prompt to stdin (stream-json format, keep open) ───
-    // Using --input-format stream-json for bidirectional communication.
-    // Stdin stays open so follow-up messages can be sent.
-    const userMessage = JSON.stringify({
-      type: 'user',
-      message: {
-        role: 'user',
-        content: buildUserContent(options.prompt, options.images),
-      },
-    })
-    child.stdin!.write(userMessage + '\n')
-
-    this.activeRuns.set(requestId, handle)
-    return handle
+    // ─── Write prompt to stdin (stream-json format, kept open for the next message) ───
+    this._writePrompt(handle, options)
+    return proc
   }
 
   /**

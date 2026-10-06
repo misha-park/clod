@@ -60,8 +60,8 @@ export class ControlPlane extends EventEmitter {
   private runManager: RunManager
   /** Permission hook server for PreToolUse HTTP hooks */
   private permissionServer: PermissionServer
-  /** Per-run tokens: requestId → runToken (for cleanup on exit/error) */
-  private runTokens = new Map<string, string>()
+  /** Permission tokens per tab process: procId → token (released when the process ends) */
+  private procTokens = new Map<string, string>()
   /** Global permission mode: 'ask' shows cards, 'auto' auto-approves */
   private permissionMode: 'ask' | 'auto' = 'ask'
   /** Resolves when the permission server is ready (or failed). Dispatch awaits this. */
@@ -141,14 +141,39 @@ export class ControlPlane extends EventEmitter {
       this.emit('event', tabId, event)
     })
 
-    this.runManager.on('exit', (requestId: string, code: number | null, signal: string | null, sessionId: string | null) => {
-      // Clean up per-run token
-      const runToken = this.runTokens.get(requestId)
-      if (runToken) {
-        this.permissionServer.unregisterRun(runToken)
-        this.runTokens.delete(requestId)
+    // A run finished successfully; the tab's process stays alive for the next message.
+    this.runManager.on('complete', (requestId: string, sessionId: string | null) => {
+      const tabId = this._findTabByRequest(requestId)
+      const inflight = this.inflightRequests.get(requestId)
+      if (!tabId || !this.tabs.get(tabId)) {
+        if (inflight) {
+          inflight.resolve()
+          this.inflightRequests.delete(requestId)
+        }
+        return
       }
+      const tab = this.tabs.get(tabId)!
+      tab.activeRequestId = null
+      tab.runPid = null
+      if (sessionId) tab.claudeSessionId = sessionId
+      this._setTabStatus(tabId, 'completed')
+      if (inflight) {
+        inflight.resolve()
+        this.inflightRequests.delete(requestId)
+      }
+      this._processQueue(tabId)
+    })
 
+    // A tab process is gone (idle timeout, crash, cancel, tab closed): release its token.
+    this.runManager.on('process-ended', (procId: string) => {
+      const token = this.procTokens.get(procId)
+      if (token) {
+        this.permissionServer.unregisterRun(token)
+        this.procTokens.delete(procId)
+      }
+    })
+
+    this.runManager.on('exit', (requestId: string, code: number | null, signal: string | null, sessionId: string | null) => {
       const tabId = this._findTabByRequest(requestId)
 
       // Always clean up inflight promise, even if tab was already closed.
@@ -194,13 +219,6 @@ export class ControlPlane extends EventEmitter {
     })
 
     this.runManager.on('error', (requestId: string, err: Error) => {
-      // Clean up per-run token
-      const runToken = this.runTokens.get(requestId)
-      if (runToken) {
-        this.permissionServer.unregisterRun(runToken)
-        this.runTokens.delete(requestId)
-      }
-
       const tabId = this._findTabByRequest(requestId)
 
       // Always clean up inflight even if tab is gone
@@ -261,6 +279,8 @@ export class ControlPlane extends EventEmitter {
     if (!tab) return
     log(`Resetting session for tab ${tabId} (was: ${tab.claudeSessionId})`)
     tab.claudeSessionId = null
+    // Its process belongs to the old folder/session; the next message starts fresh.
+    if (!tab.activeRequestId) this.runManager.endTab(tabId)
   }
 
   /**
@@ -300,6 +320,7 @@ export class ControlPlane extends EventEmitter {
       return true
     })
 
+    this.runManager.endTab(tabId)
     this.tabs.delete(tabId)
     log(`Tab closed: ${tabId}`)
   }
@@ -382,17 +403,18 @@ export class ControlPlane extends EventEmitter {
       options = { ...options, sessionId: tab.claudeSessionId }
     }
 
-    // Per-run token lifecycle: register run, generate per-run settings file
-    if (this.permissionServer.getPort()) {
-      const runToken = this.permissionServer.registerRun(tabId, requestId, options.sessionId || null)
-      this.runTokens.set(requestId, runToken)
-      const hookSettingsPath = this.permissionServer.generateSettingsFile(runToken)
-      options = { ...options, hookSettingsPath }
-    }
-
     // Tell the run manager the current permission mode so 'auto' can bypass
     // approvals at the CLI level (this transport has no interactive prompt).
     options = { ...options, permissionMode: this.permissionMode }
+
+    // A new process needs its own permission token and hook settings file; a
+    // reused process keeps the token it was started with.
+    let newToken: string | null = null
+    if (!this.runManager.canReuse(tabId, options) && this.permissionServer.getPort()) {
+      newToken = this.permissionServer.registerRun(tabId, requestId, options.sessionId || null)
+      const hookSettingsPath = this.permissionServer.generateSettingsFile(newToken)
+      options = { ...options, hookSettingsPath }
+    }
 
     tab.activeRequestId = requestId
     tab.promptCount++
@@ -403,8 +425,14 @@ export class ControlPlane extends EventEmitter {
     this._setTabStatus(tabId, newStatus)
 
     try {
-      tab.runPid = this.runManager.startRun(requestId, options).pid
+      const { handle, procId, reused } = this.runManager.startRun(requestId, options, tabId)
+      tab.runPid = handle.pid
+      if (newToken) {
+        if (reused) this.permissionServer.unregisterRun(newToken)
+        else this.procTokens.set(procId, newToken)
+      }
     } catch (err) {
+      if (newToken) this.permissionServer.unregisterRun(newToken)
       // Start failure before inflight registration: rollback tab run state.
       tab.activeRequestId = null
       tab.runPid = null
@@ -554,5 +582,6 @@ export class ControlPlane extends EventEmitter {
     for (const [tabId] of this.tabs) {
       this.closeTab(tabId)
     }
+    this.runManager.endAll()
   }
 }
