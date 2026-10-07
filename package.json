@@ -1,7 +1,7 @@
 {
   "name": "clod",
   "version": "0.1.0",
-  "description": "Clod — Command Line User Interface for Claude Code",
+  "description": "Clod \u2014 Command Line User Interface for Claude Code",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,7 +22,8 @@
     "dist": "bash scripts/build-settings.sh && electron-vite build --mode production && electron-builder --mac --dir",
     "doctor": "bash scripts/doctor.sh",
     "postinstall": "electron-builder install-app-deps && bash scripts/patch-dev-icon.sh",
-    "build:settings": "bash scripts/build-settings.sh"
+    "build:settings": "bash scripts/build-settings.sh",
+    "dmg": "bash scripts/make-dmg.sh"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -47,7 +48,8 @@
       "dist/preload/**/*",
       "dist/renderer/**/*",
       "resources/**/*",
-      "package.json"
+      "package.json",
+      "!resources/dmg/**"
     ],
     "mac": {
       "icon": "resources/icon.icns",
@@ -59,6 +61,29 @@
           "to": "Helpers/Clod Settings.app"
         }
       ]
+    },
+    "dmg": {
+      "title": "Install Clod",
+      "background": "resources/dmg/background.tiff",
+      "window": {
+        "width": 660,
+        "height": 480
+      },
+      "iconSize": 96,
+      "contents": [
+        {
+          "x": 165,
+          "y": 162,
+          "type": "file"
+        },
+        {
+          "x": 495,
+          "y": 162,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "artifactName": "Clod-${version}.dmg"
     }
   },
   "devDependencies": {
