@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, X, MagnifyingGlass, PushPin, PencilSimple, DownloadSimple, Trash,
-  ChatCircle, SidebarSimple, Cards,
+  ChatCircle,
 } from '@phosphor-icons/react'
 import { useColors } from '../../theme'
 import { useSessionStore } from '../../stores/sessionStore'
@@ -29,7 +29,6 @@ function Highlight({ text, query }: { text: string; query: string }) {
 export function SessionBrowser({ variant }: { variant: 'card' | 'drawer' }) {
   const colors = useColors()
   const setHistoryOpen = useSessionStore((s) => s.setHistoryOpen)
-  const setHistoryMode = useSessionStore((s) => s.setHistoryMode)
   const b = useSessionBrowser(true)
   const [selected, setSelected] = useState(0)
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -105,9 +104,6 @@ export function SessionBrowser({ variant }: { variant: 'card' | 'drawer' }) {
         >
           {b.allFolders ? 'All' : (compact ? 'Folder' : 'This folder')}
         </button>
-        {iconBtn(variant === 'card' ? 'Show beside Clod instead' : 'Show inside Clod instead',
-          variant === 'card' ? <SidebarSimple size={13} /> : <Cards size={13} />,
-          () => setHistoryMode(variant === 'card' ? 'drawer' : 'card'))}
       </div>
 
       {/* Results */}

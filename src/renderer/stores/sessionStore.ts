@@ -106,12 +106,15 @@ interface SessionPrefs {
   preferredModel: string | null
   permissionMode: 'ask' | 'auto'
   defaultDirOverride: string | null
+  /** Where past conversations open: beside Clod ('drawer') or inside it ('card') */
+  historyLayout: 'drawer' | 'card'
 }
 
 const DEFAULT_PREFS: SessionPrefs = {
   preferredModel: 'sonnet',
   permissionMode: 'ask',
   defaultDirOverride: null,
+  historyLayout: 'drawer',
 }
 
 function validatePrefs(p: Record<string, any>): SessionPrefs {
@@ -123,6 +126,7 @@ function validatePrefs(p: Record<string, any>): SessionPrefs {
           : p.preferredModel === null ? null : DEFAULT_PREFS.preferredModel,
         permissionMode: p.permissionMode === 'auto' ? 'auto' : 'ask',
         defaultDirOverride: typeof p.defaultDirOverride === 'string' ? p.defaultDirOverride : null,
+        historyLayout: p.historyLayout === 'card' ? 'card' : 'drawer',
       }
     }
   } catch {}
@@ -133,7 +137,7 @@ function loadPrefs(): SessionPrefs {
   return validatePrefs(loadInitialSettings(PREFS_KEY))
 }
 
-function savePrefs(p: SessionPrefs): void {
+function savePrefs(p: Partial<SessionPrefs>): void {
   persistSettings({ ...p })
 }
 
@@ -322,17 +326,15 @@ export const useSessionStore = create<State>((set, get) => ({
   activeTabId: initialTab.id,
   isExpanded: false,
   historyOpen: false,
-  // The side drawer is the default; the in-card view stays available from its header.
-  historyMode: (() => {
-    try { return localStorage.getItem('clod-history-layout') === 'card' ? 'card' : 'drawer' } catch { return 'drawer' }
-  })() as 'card' | 'drawer',
+  // Chosen in the native settings app (Appearance → Past conversations).
+  historyMode: initialPrefs.historyLayout,
   setHistoryOpen: (open) => {
     // The in-card view lives in the card body, so the card must be expanded.
     if (open && get().historyMode === 'card') set({ historyOpen: true, isExpanded: true })
     else set({ historyOpen: open })
   },
   setHistoryMode: (mode) => {
-    try { localStorage.setItem('clod-history-layout', mode) } catch {}
+    savePrefs({ historyLayout: mode })
     set((s) => ({ historyMode: mode, isExpanded: mode === 'card' && s.historyOpen ? true : s.isExpanded }))
   },
   staticInfo: null,
@@ -1194,6 +1196,7 @@ onExternalSettingsChange((raw) => {
   if (next.preferredModel !== s.preferredModel) s.setPreferredModel(next.preferredModel as string)
   if (next.permissionMode !== s.permissionMode) s.setPermissionMode(next.permissionMode)
   if (next.defaultDirOverride !== s.defaultDirOverride) s.setDefaultDirOverride(next.defaultDirOverride)
+  if (next.historyLayout !== s.historyMode) s.setHistoryMode(next.historyLayout)
 })
 
 // Remember which conversations are open (only tabs that have one), so the next

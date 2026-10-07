@@ -37,6 +37,13 @@ struct SettingsView: View {
                 Toggle(isOn: bind(\.expandedUI, "expandedUI")) {
                     RowLabel("Full width", symbol: "arrow.left.and.right", color: .teal)
                 }
+                Picker(selection: bind(\.historyLayout, "historyLayout")) {
+                    Text("Beside Clod").tag("drawer")
+                    Text("Inside Clod").tag("card")
+                } label: {
+                    RowLabel("Past conversations", symbol: "clock.arrow.circlepath", color: .brown)
+                }
+                .pickerStyle(.segmented)
                 Toggle(isOn: bind(\.borderAnimation, "borderAnimation")) {
                     RowLabel("Input glow", symbol: "sparkles", color: .purple)
                 }

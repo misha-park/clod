@@ -35,6 +35,7 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var preferredModel = "sonnet"
     @Published private(set) var permissionMode = "ask"
     @Published private(set) var defaultDirOverride: String?
+    @Published private(set) var historyLayout = "drawer"
 
     // State published by Clod
     @Published private(set) var accessibilityGranted: Bool?
@@ -103,6 +104,7 @@ final class SettingsModel: ObservableObject {
         preferredModel = d["preferredModel"] as? String ?? "sonnet"
         permissionMode = (d["permissionMode"] as? String) == "auto" ? "auto" : "ask"
         defaultDirOverride = d["defaultDirOverride"] as? String
+        historyLayout = (d["historyLayout"] as? String) == "card" ? "card" : "drawer"
     }
 
     private func reloadState() {
