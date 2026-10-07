@@ -11,6 +11,7 @@ import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useFolderDrop } from './hooks/useFolderDrop'
 import { ResizeHandles } from './components/ResizeHandles'
+import { SessionBrowser } from './components/history/SessionBrowser'
 import { overlaySize, windowSizeFor } from '../shared/layout'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore } from './theme'
@@ -28,6 +29,23 @@ export default function App() {
   const overlayHeight = useThemeStore((s) => s.overlayHeight)
   // While the user drags a resize handle: no size animations, no click-through.
   const [resizing, setResizing] = useState(false)
+  const historyOpen = useSessionStore((s) => s.historyOpen)
+  const historyMode = useSessionStore((s) => s.historyMode)
+  const drawerOpen = historyOpen && historyMode === 'drawer'
+  const historyInCard = historyOpen && historyMode === 'card'
+  // The drawer runs from the card's top down to the input bar; track the card's top.
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [cardTop, setCardTop] = useState(0)
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+    const update = () => setCardTop(el.offsetTop)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    if (el.parentElement) ro.observe(el.parentElement)
+    return () => ro.disconnect()
+  }, [])
   const resizingRef = useRef(false)
   const windowPosition = useThemeStore((s) => s.windowPosition)
   const borderAnimation = useThemeStore((s) => s.borderAnimation)
@@ -233,8 +251,11 @@ export default function App() {
   // Keep the transparent native window big enough for the card.
   useEffect(() => {
     const w = windowSizeFor(size, window.screen.availWidth, window.screen.availHeight)
-    window.clod.setWindowSize?.(w.width, w.height)
-  }, [size.cardWidth, size.conversationHeight])
+    // The drawer sits left of the card (both sides' worth of room when centred).
+    const drawerRoom = drawerOpen ? (windowPosition === 'right' ? 282 + 16 : 2 * 282) : 0
+    const width = Math.min(window.screen.availWidth, Math.max(w.width, size.cardWidth + drawerRoom + 24))
+    window.clod.setWindowSize?.(width, w.height)
+  }, [size.cardWidth, size.conversationHeight, drawerOpen, windowPosition])
 
   return (
     <PopoverLayerProvider>
@@ -251,6 +272,19 @@ export default function App() {
 
         {/* ─── content column. Circles overflow left. ─── */}
         <div style={{ width: contentWidth, position: 'relative', margin: windowPosition === 'right' ? '0' : '0 auto', transition: resizing ? 'none' : 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)', transform: 'translateY(var(--clod-card-y, 0px))' }}>
+          {drawerOpen && (
+            <div
+              data-clod-ui
+              className="rounded-2xl overflow-hidden"
+              style={{
+                position: 'absolute', right: 'calc(100% + 12px)', top: cardTop, bottom: 10, width: 270, zIndex: 30,
+                background: colors.popoverBg, border: `1px solid ${colors.popoverBorder}`, boxShadow: colors.popoverShadow,
+                backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+              }}
+            >
+              <SessionBrowser variant="drawer" />
+            </div>
+          )}
 
           <AnimatePresence initial={false}>
             {marketplaceOpen && (
@@ -293,6 +327,7 @@ export default function App() {
             panel rendered above it, never inside it.
           */}
           <motion.div
+            ref={cardRef}
             data-clod-ui
             className="overflow-hidden flex flex-col drag-region"
             animate={{
@@ -355,10 +390,16 @@ export default function App() {
               transition={resizing ? { duration: 0 } : TRANSITION}
               className="overflow-hidden no-drag"
             >
-              <div style={{ maxHeight: bodyMaxHeight }}>
-                <ConversationView />
-                <StatusBar />
-              </div>
+              {historyInCard ? (
+                <div style={{ height: size.conversationHeight + 44 }}>
+                  <SessionBrowser variant="card" />
+                </div>
+              ) : (
+                <div style={{ maxHeight: bodyMaxHeight }}>
+                  <ConversationView />
+                  <StatusBar />
+                </div>
+              )}
             </motion.div>
           </motion.div>
 

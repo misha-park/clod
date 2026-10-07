@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Copy, Check, ArrowsOutLineHorizontal } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
-import { HistoryPicker } from './HistoryPicker'
+import { HistoryButton } from './history/HistoryButton'
 import { SettingsButton } from './SettingsButton'
 import { useColors, useThemeStore } from '../theme'
 import type { TabStatus } from '../../shared/types'
@@ -183,7 +183,7 @@ export function TabStrip() {
           <Plus size={14} />
         </button>
 
-        <HistoryPicker />
+        <HistoryButton />
 
         <SettingsButton />
       </div>

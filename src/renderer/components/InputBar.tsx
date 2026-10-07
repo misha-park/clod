@@ -4,6 +4,8 @@ import { ArrowUp, Camera, Paperclip } from '@phosphor-icons/react'
 import { useSessionStore, AVAILABLE_MODELS } from '../stores/sessionStore'
 import { AttachmentChips } from './AttachmentChips'
 import { SlashCommandMenu, getFilteredCommandsWithExtras, type SlashCommand } from './SlashCommandMenu'
+import { SessionSearchMenu, SESSION_MENU_LIMIT } from './history/SessionSearchMenu'
+import { useSessionBrowser } from './history/useSessionBrowser'
 import { useColors, useThemeStore, DEFAULT_PLACEHOLDER } from '../theme'
 
 const INPUT_MIN_HEIGHT = 20
@@ -55,6 +57,23 @@ export function InputBar() {
   const canSend = !!tab && !isConnecting && hasContent
   const attachments = tab?.attachments || []
   const showSlashMenu = slashFilter !== null && !isConnecting
+
+  // `?query` searches past conversations, like `/` lists commands.
+  const sessionQuery = input.startsWith('?') ? input.slice(1) : null
+  const showSessionMenu = sessionQuery !== null && !showSlashMenu
+  const sessionSearch = useSessionBrowser(showSessionMenu)
+  const [sessionIndex, setSessionIndex] = useState(0)
+  useEffect(() => {
+    if (sessionQuery === null) return
+    sessionSearch.setQuery(sessionQuery)
+    setSessionIndex(0)
+  }, [sessionQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+  const openSearchedSession = (index: number) => {
+    const s = sessionSearch.sessions[index]
+    if (!s) return
+    setInput('')
+    sessionSearch.open(s)
+  }
   const skillCommands: SlashCommand[] = (tab?.sessionSkills || []).map((skill) => ({
     command: `/${skill}`,
     description: `Run skill: ${skill}`,
@@ -296,6 +315,14 @@ export function InputBar() {
 
   // ─── Keyboard ───
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSessionMenu) {
+      const count = Math.min(SESSION_MENU_LIMIT, sessionSearch.sessions.length)
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (count) setSessionIndex((i) => (i + 1) % count); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); if (count) setSessionIndex((i) => (i - 1 + count) % count); return }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); openSearchedSession(sessionIndex); return }
+      if (e.key === 'Tab') { e.preventDefault(); sessionSearch.setAllFolders(!sessionSearch.allFolders); return }
+      if (e.key === 'Escape') { e.preventDefault(); setInput(''); return }
+    }
     if (showSlashMenu) {
       const filtered = getFilteredCommandsWithExtras(slashFilter!, skillCommands)
       if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex((i) => (i + 1) % filtered.length); return }
@@ -339,6 +366,19 @@ export function InputBar() {
   return (
     <div ref={wrapperRef} data-clod-ui className="flex flex-col w-full relative">
       {/* Slash command menu */}
+      <AnimatePresence>
+        {showSessionMenu && (
+          <SessionSearchMenu
+            query={sessionQuery ?? ''}
+            sessions={sessionSearch.sessions}
+            loading={sessionSearch.loading}
+            allFolders={sessionSearch.allFolders}
+            selectedIndex={sessionIndex}
+            onSelect={(s) => openSearchedSession(sessionSearch.sessions.indexOf(s))}
+            anchorRect={wrapperRef.current?.getBoundingClientRect() ?? null}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {showSlashMenu && (
           <SlashCommandMenu

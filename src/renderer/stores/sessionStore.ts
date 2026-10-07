@@ -157,6 +157,11 @@ interface State {
   activeTabId: string
   /** Global expand/collapse — user-controlled, not per-tab */
   isExpanded: boolean
+  /** Session history panel: shown in the card ('card') or beside it ('drawer') */
+  historyOpen: boolean
+  historyMode: 'card' | 'drawer'
+  setHistoryOpen: (open: boolean) => void
+  setHistoryMode: (mode: 'card' | 'drawer') => void
   /** Global info fetched on startup (not per-session) */
   staticInfo: StaticInfo | null
   /** User's preferred model override (null = use default). Persisted. */
@@ -316,6 +321,19 @@ export const useSessionStore = create<State>((set, get) => ({
   tabs: [initialTab],
   activeTabId: initialTab.id,
   isExpanded: false,
+  historyOpen: false,
+  historyMode: (() => {
+    try { return localStorage.getItem('clod-history-mode') === 'drawer' ? 'drawer' : 'card' } catch { return 'card' }
+  })() as 'card' | 'drawer',
+  setHistoryOpen: (open) => {
+    // The in-card view lives in the card body, so the card must be expanded.
+    if (open && get().historyMode === 'card') set({ historyOpen: true, isExpanded: true })
+    else set({ historyOpen: open })
+  },
+  setHistoryMode: (mode) => {
+    try { localStorage.setItem('clod-history-mode', mode) } catch {}
+    set((s) => ({ historyMode: mode, isExpanded: mode === 'card' && s.historyOpen ? true : s.isExpanded }))
+  },
   staticInfo: null,
   preferredModel: initialPrefs.preferredModel,
   permissionMode: initialPrefs.permissionMode,
