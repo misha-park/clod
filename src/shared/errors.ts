@@ -1,7 +1,7 @@
 /**
  * Plain-English versions of the errors a new user is most likely to hit:
- * Claude Code missing, not signed in, an expired sign-in, no paid plan, or an
- * API account out of credit. Anything else is shown as Claude Code reported it.
+ * no internet, Claude Code missing, not signed in, an expired sign-in, no paid
+ * plan, or an API account out of credit. Anything else is shown as Claude Code reported it.
  */
 
 export type ErrorAction = 'setup' | 'account'
@@ -13,6 +13,11 @@ export interface ExplainedError {
 }
 
 const RULES: Array<{ test: RegExp; text: string; action: ErrorAction | null }> = [
+  {
+    test: /ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|fetch failed|connection error|network (error|request failed)|socket hang up|unable to connect/i,
+    text: "Clod couldn't reach Claude. Check your internet connection, then press Retry.",
+    action: null,
+  },
   {
     test: /spawn \S*claude ENOENT|claude: command not found|ENOENT.*claude/i,
     text: "Claude Code isn't installed on this Mac. Clod needs it to answer you. Setup installs it in about a minute.",

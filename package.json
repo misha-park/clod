@@ -61,7 +61,8 @@
           "from": "dist-native/Clod Settings.app",
           "to": "Helpers/Clod Settings.app"
         }
-      ]
+      ],
+      "minimumSystemVersion": "13.0"
     },
     "dmg": {
       "title": "Install Clod",

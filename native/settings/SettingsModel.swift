@@ -41,6 +41,8 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var historyLayout = "drawer"
     /// Set by Clod on first launch (or by "Run setup again") to show the setup steps.
     @Published private(set) var showSetup = false
+    /// Set once the user has picked (or accepted) Claude's starting folder in setup.
+    @Published private(set) var folderChosen = false
 
     // State published by Clod
     @Published private(set) var accessibilityGranted: Bool?
@@ -133,6 +135,7 @@ final class SettingsModel: ObservableObject {
         defaultDirOverride = d["defaultDirOverride"] as? String
         historyLayout = (d["historyLayout"] as? String) == "card" ? "card" : "drawer"
         showSetup = d["showSetup"] as? Bool ?? false
+        folderChosen = d["folderChosen"] as? Bool ?? false
     }
 
     private func reloadState() {

@@ -14,6 +14,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
+import { HotkeyTip } from './HotkeyTip'
 import { useColors, useThemeStore } from '../theme'
 import { overlaySize } from '../../shared/layout'
 import type { Message } from '../../shared/types'
@@ -318,6 +319,7 @@ function EmptyState() {
         <FolderOpen size={13} />
         Choose folder
       </button>
+      <HotkeyTip />
     </div>
   )
 }

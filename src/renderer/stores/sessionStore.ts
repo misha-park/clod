@@ -3,6 +3,7 @@ import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '
 import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { useThemeStore } from '../theme'
 import { explainError } from '../../shared/errors'
+import { describeRateLimit } from '../../shared/limits'
 import notificationSrc from '../../../resources/notification.mp3'
 
 // ─── Known models ───
@@ -1137,19 +1138,18 @@ export const useSessionStore = create<State>((set, get) => ({
             break
           }
 
-          case 'rate_limit':
-            if (event.status !== 'allowed') {
+          case 'rate_limit': {
+            const text = describeRateLimit(event.status, event.rateLimitType, event.resetsAt)
+            // Claude Code repeats these; show each message once in a row.
+            const last = updated.messages[updated.messages.length - 1]
+            if (text && !(last?.role === 'system' && last.content === text)) {
               updated.messages = [
                 ...updated.messages,
-                {
-                  id: nextMsgId(),
-                  role: 'system',
-                  content: `Rate limited (${event.rateLimitType}). Resets at ${new Date(event.resetsAt).toLocaleTimeString()}.`,
-                  timestamp: Date.now(),
-                },
+                { id: nextMsgId(), role: 'system', content: text, timestamp: Date.now() },
               ]
             }
             break
+          }
         }
 
         return updated

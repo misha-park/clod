@@ -574,6 +574,13 @@ export class ControlPlane extends EventEmitter {
     this.emit('tab-status-change', tabId, newStatus, oldStatus)
   }
 
+  /** Number of tabs where Claude is working on a request right now. */
+  busyTabCount(): number {
+    let count = 0
+    for (const tab of this.tabs.values()) if (tab.activeRequestId) count++
+    return count
+  }
+
   /** After a sign-in change: idle processes restart with the new credentials on the next message. */
   restartIdleProcesses(): void {
     this.runManager.endIdle()

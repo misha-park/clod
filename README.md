@@ -2,7 +2,7 @@
 
 A floating window for [Claude Code](https://docs.claude.com/en/docs/claude-code) on your Mac. Double-tap **⌥ Option** in any app, ask Claude something, and carry on with what you were doing. Clod runs the real Claude Code in the background, so it can read and edit files, run commands and use your Claude Code setup, all from a small overlay.
 
-Clod works on Macs with Apple silicon (M1 or newer).
+Clod works on Macs with Apple silicon (M1 or newer) running macOS 13 Ventura or later.
 
 ## What you need
 
@@ -11,7 +11,7 @@ Clod works on Macs with Apple silicon (M1 or newer).
 
 ## Install
 
-1. Download **Clod-3.1.0.dmg** from the [latest release](https://github.com/misha-park/clod/releases/latest).
+1. Download the latest **Clod DMG** from the [releases page](https://github.com/misha-park/clod/releases/latest).
 2. Open it and drag **Clod** onto **Applications**.
 3. Open Clod from Applications. Clod isn't signed by Apple, so the first time macOS says it can't check it. Click **Done**.
 4. Open **System Settings → Privacy & Security**, scroll to the bottom, click **Open Anyway** next to "Clod was blocked", and enter your Mac password. You only do this once.
@@ -105,9 +105,7 @@ tccutil reset Accessibility com.clod.app && tccutil reset ScreenCapture com.clod
 
 ### Releasing
 
-1. Bump `version` in `package.json` (and the two matching lines in `package-lock.json`).
-2. `npm run dmg`
-3. Create a GitHub release tagged `v<version>` and attach `release/Clod-<version>.dmg`. Clod's update check reads the latest release.
+Follow [docs/RELEASE-CHECKLIST.md](docs/RELEASE-CHECKLIST.md): bump the version, build the DMG, test it as a new user, then publish a GitHub release. Clod's update check reads the latest release.
 
 ## Licence
 

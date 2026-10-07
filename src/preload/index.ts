@@ -35,6 +35,8 @@ export interface ClodAPI {
   setOpenAtLogin(enabled: boolean): void
   getTheme(): Promise<{ isDark: boolean }>
   onThemeChange(callback: (isDark: boolean) => void): () => void
+  /** Fires each time the user shows or hides Clod with the keyboard shortcut */
+  onHotkeyUsed(callback: () => void): () => void
 
   // ─── Window management ───
   hideWindow(): void
@@ -105,6 +107,11 @@ const api: ClodAPI = {
     const handler = (_e: Electron.IpcRendererEvent, isDark: boolean) => callback(isDark)
     ipcRenderer.on(IPC.THEME_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC.THEME_CHANGED, handler)
+  },
+  onHotkeyUsed: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC.HOTKEY_USED, handler)
+    return () => ipcRenderer.removeListener(IPC.HOTKEY_USED, handler)
   },
 
   // ─── Window management ───

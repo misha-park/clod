@@ -56,6 +56,7 @@ struct SetupView: View {
         switch step {
         case .install: return status.cliInstalled
         case .signIn: return status.canUseClaude
+        case .folder: return model.folderChosen
         case .shortcut: return status.accessibility
         case .screenshots: return status.screen == "granted"
         case .terminal: return status.automation == "granted"
@@ -78,6 +79,7 @@ struct SetupView: View {
         switch step {
         case .install: installContent
         case .signIn: signInContent
+        case .folder: folderContent
         case .shortcut: shortcutContent
         case .screenshots: screenshotsContent
         case .terminal: terminalContent
@@ -110,6 +112,41 @@ struct SetupView: View {
         } else {
             if status.needsPaidPlan { PaidPlanNotice() }
             SignInPanel()
+        }
+    }
+
+    @ViewBuilder
+    private var folderContent: some View {
+        let folder = (model.defaultDirOverride ?? model.defaultDir) as NSString
+        if model.folderChosen {
+            Text("Claude starts in \(folder.abbreviatingWithTildeInPath).").foregroundStyle(.secondary)
+        } else {
+            Text("Claude reads and changes the files in one folder at a time. Choose where it starts. You can switch any time from the folder button above the message bar, or by dragging a folder onto Clod.")
+            Label(folder.abbreviatingWithTildeInPath, systemImage: "folder.fill")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            HStack {
+                Button("Use this folder") { model.set("folderChosen", true) }
+                    .buttonStyle(.borderedProminent)
+                Button("Choose another…") { chooseFolder() }
+            }
+            Text("If you're not sure, keep the suggested one. It's an empty folder just for Clod.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose the folder Claude should start in"
+        panel.directoryURL = URL(fileURLWithPath: (model.defaultDirOverride ?? model.defaultDir) as String)
+        if panel.runModal() == .OK, let url = panel.url {
+            model.set("defaultDirOverride", url.path)
+            model.set("folderChosen", true)
         }
     }
 
@@ -210,13 +247,14 @@ struct SetupView: View {
 }
 
 enum SetupStep: Int, CaseIterable, Identifiable {
-    case install, signIn, shortcut, screenshots, terminal, finish
+    case install, signIn, folder, shortcut, screenshots, terminal, finish
     var id: Int { rawValue }
 
     var title: String {
         switch self {
         case .install: return "Install Claude Code"
         case .signIn: return "Sign in"
+        case .folder: return "Choose a folder"
         case .shortcut: return "Allow the shortcut"
         case .screenshots: return "Allow screenshots (optional)"
         case .terminal: return "Allow Terminal (optional)"

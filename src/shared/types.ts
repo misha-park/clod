@@ -208,7 +208,7 @@ export type NormalizedEvent =
   | { type: 'task_complete'; result: string; costUsd: number; durationMs: number; numTurns: number; usage: UsageData; sessionId: string; permissionDenials?: Array<{ toolName: string; toolUseId: string }> }
   | { type: 'error'; message: string; isError: boolean; sessionId?: string }
   | { type: 'session_dead'; exitCode: number | null; signal: string | null; stderrTail: string[] }
-  | { type: 'rate_limit'; status: string; resetsAt: number; rateLimitType: string }
+  | { type: 'rate_limit'; status: string; resetsAt?: number; rateLimitType?: string }
   | { type: 'usage'; usage: UsageData }
   | { type: 'permission_request'; questionId: string; toolName: string; toolDescription?: string; toolInput?: Record<string, unknown>; options: Array<{ id: string; label: string; kind?: string }> }
 
@@ -385,6 +385,7 @@ export const IPC = {
 
   // Skill provisioning (main → renderer)
   SKILL_STATUS: 'clod:skill-status',
+  HOTKEY_USED: 'clod:hotkey-used',
 
   // Theme
   GET_THEME: 'clod:get-theme',

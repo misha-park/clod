@@ -232,7 +232,26 @@ function createWindow(): void {
   })
 
   let forceQuit = false
-  app.on('before-quit', () => { forceQuit = true })
+  let quitConfirmed = false
+  app.on('before-quit', (e) => {
+    // Quitting while Claude is working stops it part-way through, which can
+    // leave files half-changed, so check first.
+    const busy = controlPlane.busyTabCount()
+    if (busy > 0 && !quitConfirmed) {
+      app.focus({ steal: true }) // Clod has no Dock icon; bring the question to the front
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        message: 'Claude is still working. Quit anyway?',
+        detail: `Quitting now stops ${busy === 1 ? 'the reply' : `${busy} replies`} part-way through, which can leave files half-changed.`,
+        buttons: ['Keep working', 'Quit'],
+        defaultId: 0,
+        cancelId: 0,
+      })
+      if (choice === 0) { e.preventDefault(); return }
+      quitConfirmed = true
+    }
+    forceQuit = true
+  })
   mainWindow.on('close', (e) => {
     if (!forceQuit) {
       e.preventDefault()
@@ -361,6 +380,9 @@ function toggleWindow(source = 'unknown'): void {
     log(`[spaces] toggle#${toggleId} source=${source} start`)
     snapshotWindowState(`toggle#${toggleId} pre`)
   }
+
+  // Lets the overlay retire its first-run "double-tap to show or hide" tip.
+  if (source.startsWith('double-tap') || source.startsWith('shortcut')) broadcast(IPC.HOTKEY_USED)
 
   if (mainWindow.isVisible()) {
     mainWindow.hide()

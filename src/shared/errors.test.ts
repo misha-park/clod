@@ -19,6 +19,11 @@ describe('explainError', () => {
     expect(explainError('Claude Code requires a paid plan')?.text).toMatch(/paid plan/)
   })
 
+  it('spots connection problems', () => {
+    expect(explainError('Connection error.')?.text).toMatch(/internet connection/)
+    expect(explainError('getaddrinfo ENOTFOUND api.anthropic.com')?.text).toMatch(/couldn't reach Claude/)
+  })
+
   it('leaves other errors alone', () => {
     expect(explainError('Run failed with exit code 1')).toBeNull()
     expect(explainError('Error: ENOENT: no such file or directory, open notes.txt')).toBeNull()
