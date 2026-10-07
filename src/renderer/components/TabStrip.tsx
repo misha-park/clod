@@ -4,6 +4,7 @@ import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal } from '@phosph
 import { useSessionStore } from '../stores/sessionStore'
 import { HistoryButton } from './history/HistoryButton'
 import { SettingsButton } from './SettingsButton'
+import { ButtonHint } from './ButtonHint'
 import { useColors, useThemeStore } from '../theme'
 import type { TabStatus } from '../../shared/types'
 
@@ -44,15 +45,16 @@ function OpenInCliButton() {
   const colors = useColors()
   const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
   return (
-    <button
-      onClick={() => { if (tab) window.clod.openInTerminal(tab.claudeSessionId, tab.workingDirectory) }}
-      className={GROUP_BUTTON_CLASS}
-      style={{ color: colors.textTertiary }}
-      title="Open this session in Terminal"
-      aria-label="Open in CLI"
-    >
-      <Terminal size={13} />
-    </button>
+    <ButtonHint label="Open in CLI">
+      <button
+        onClick={() => { if (tab) window.clod.openInTerminal(tab.claudeSessionId, tab.workingDirectory) }}
+        className={GROUP_BUTTON_CLASS}
+        style={{ color: colors.textTertiary }}
+        aria-label="Open in CLI"
+      >
+        <Terminal size={13} />
+      </button>
+    </ButtonHint>
   )
 }
 
@@ -73,16 +75,17 @@ function CopyConversationButton() {
     if (!hasContent) return
     try { window.clod.copyToClipboard(transcript) } catch {}
     setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    setTimeout(() => setCopied(false), 1800)
   }
 
   return (
+    <ButtonHint label={hasContent ? 'Copy conversation' : 'Nothing to copy yet'} flash={copied ? 'Conversation copied' : null}>
     <button
       onClick={handleCopy}
       disabled={!hasContent}
       className={GROUP_BUTTON_CLASS}
       style={{ color: copied ? colors.accent : colors.textTertiary, opacity: hasContent ? 1 : 0.4 }}
-      title="Copy conversation for Claude"
+      aria-label="Copy conversation"
     >
       <AnimatePresence mode="wait" initial={false}>
         {copied ? (
@@ -96,6 +99,7 @@ function CopyConversationButton() {
         )}
       </AnimatePresence>
     </button>
+    </ButtonHint>
   )
 }
 
@@ -196,16 +200,17 @@ export function TabStrip() {
       >
         <CopyConversationButton />
         <HistoryButton />
-        <button
-          onClick={() => setExpandedUI(!expandedUI)}
-          onDoubleClick={() => useThemeStore.getState().resetOverlaySize()}
-          className={GROUP_BUTTON_CLASS}
-          style={{ color: expandedUI ? colors.accent : colors.textTertiary }}
-          title={`${expandedUI ? 'Switch to narrow view' : 'Switch to wide view'} · double-click to reset size`}
-          aria-label="Toggle wide/narrow view"
-        >
-          <ArrowsOutLineHorizontal size={13} />
-        </button>
+        <ButtonHint label={expandedUI ? 'Narrow view (double-click to reset size)' : 'Full width (double-click to reset size)'}>
+          <button
+            onClick={() => setExpandedUI(!expandedUI)}
+            onDoubleClick={() => useThemeStore.getState().resetOverlaySize()}
+            className={GROUP_BUTTON_CLASS}
+            style={{ color: expandedUI ? colors.accent : colors.textTertiary }}
+            aria-label="Toggle wide/narrow view"
+          >
+            <ArrowsOutLineHorizontal size={13} />
+          </button>
+        </ButtonHint>
         <OpenInCliButton />
         <span className="flex-shrink-0" style={{ width: 1, height: 14, background: colors.containerBorder, margin: '0 2px' }} />
         <SettingsButton />

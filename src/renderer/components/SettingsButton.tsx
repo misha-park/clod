@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { GearSix } from '@phosphor-icons/react'
 import { useColors } from '../theme'
+import { ButtonHint } from './ButtonHint'
 
 /** Opens the native Clod Settings app. ⌘, works while the overlay is focused. */
 export function SettingsButton() {
@@ -18,13 +19,15 @@ export function SettingsButton() {
   }, [])
 
   return (
-    <button
-      onClick={() => window.clod.openSettings()}
-      className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"
-      style={{ color: colors.textTertiary }}
-      title="Settings (⌘,)"
-    >
-      <GearSix size={14} />
-    </button>
+    <ButtonHint label="Settings (⌘,)">
+      <button
+        onClick={() => window.clod.openSettings()}
+        className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"
+        style={{ color: colors.textTertiary }}
+        aria-label="Settings"
+      >
+        <GearSix size={14} />
+      </button>
+    </ButtonHint>
   )
 }
