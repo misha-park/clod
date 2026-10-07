@@ -55,7 +55,7 @@ struct SetupView: View {
     private func isDone(_ step: SetupStep) -> Bool {
         switch step {
         case .install: return status.cliInstalled
-        case .signIn: return status.loggedIn
+        case .signIn: return status.canUseClaude
         case .shortcut: return status.accessibility
         case .screenshots: return status.screen == "granted"
         case .terminal: return status.automation == "granted"
@@ -105,9 +105,10 @@ struct SetupView: View {
 
     @ViewBuilder
     private var signInContent: some View {
-        if status.loggedIn {
+        if status.canUseClaude {
             Text(status.accountSummary).foregroundStyle(.secondary)
         } else {
+            if status.needsPaidPlan { PaidPlanNotice() }
             SignInPanel()
         }
     }
@@ -115,7 +116,7 @@ struct SetupView: View {
     @ViewBuilder
     private var shortcutContent: some View {
         if status.accessibility {
-            Text("Done. Double-tap ⌥ Option will work once Clod restarts at the end.").foregroundStyle(.secondary)
+            Text("Done. Double-tap ⌥ Option now works from any app.").foregroundStyle(.secondary)
         } else {
             Text("Lets you open Clod from any app by double-tapping the ⌥ Option key. Clod only watches for that key.")
             Text("Click Allow, then turn on **Clod** in the list that opens in System Settings. Come back here when it's on.")
@@ -184,8 +185,8 @@ struct SetupView: View {
             .foregroundStyle(.secondary)
         Button("Finish and restart Clod") { finish(relaunch: true) }
             .buttonStyle(.borderedProminent)
-            .disabled(!status.cliInstalled || !status.loggedIn)
-        if !status.cliInstalled || !status.loggedIn {
+            .disabled(!status.cliInstalled || !status.canUseClaude)
+        if !status.cliInstalled || !status.canUseClaude {
             Text("Install Claude Code and sign in first.").font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -287,7 +288,16 @@ struct SignInPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if signingIn {
+            if signingIn && status.taskTerminal {
+                Text("A Terminal window opened. Follow the steps there: it opens a sign-in page in your browser, and may ask you to paste a code back into Terminal.")
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for you to finish signing in…").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Cancel") { Task { await send("cancelLogin") } }
+                }
+                .font(.callout)
+            } else if signingIn {
                 Text("Your browser opened a Claude sign-in page. Approve it there.")
                 Text("If the page shows a code, copy it and paste it here:").foregroundStyle(.secondary)
                 HStack {
@@ -307,10 +317,19 @@ struct SignInPanel: View {
                     Button("Cancel") { Task { await send("cancelLogin") } }
                 }
                 .font(.callout)
+                terminalFallback(prompt: "Not working?")
             } else {
-                Text("Use your Claude account. Signing in with Claude needs a Pro or Max plan. With an Anthropic API account you pay for what you use instead.")
+                Text("Clod needs one of these:")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("• **A paid Claude plan** (Pro, Max, Team or Enterprise). Free Claude accounts can't use Claude Code.")
+                    Text("• **An Anthropic API account**, where you pay for what you use. Create one at console.anthropic.com.")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 if status.task("login") && status.taskState == "failed" {
                     Text(status.taskMessage).foregroundStyle(.orange).font(.callout)
+                    Text("If you signed in with a free Claude account, upgrade it at claude.ai, or sign in with an API account instead.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 HStack {
                     Button("Sign in with Claude") { Task { await send("login", ["method": "claudeai"]) } }
@@ -318,6 +337,7 @@ struct SignInPanel: View {
                     Button("Sign in with an API account") { Task { await send("login", ["method": "console"]) } }
                 }
                 .disabled(!status.cliInstalled)
+                terminalFallback(prompt: "Having trouble?")
                 Button(showPaste ? "Hide" : "Paste a token or API key instead…") { showPaste.toggle() }
                     .buttonStyle(.link)
                     .font(.callout)
@@ -327,6 +347,20 @@ struct SignInPanel: View {
                 Text(error).foregroundStyle(.orange).font(.callout)
             }
         }
+    }
+
+    /// Links that sign in using a Terminal window instead, where `claude auth login` always works.
+    private func terminalFallback(prompt: String) -> some View {
+        HStack(spacing: 4) {
+            Text("\(prompt) Sign in using Terminal:").foregroundStyle(.secondary)
+            Button("Claude account") { Task { await send("loginInTerminal", ["method": "claudeai"]) } }
+                .buttonStyle(.link)
+            Text("·").foregroundStyle(.secondary)
+            Button("API account") { Task { await send("loginInTerminal", ["method": "console"]) } }
+                .buttonStyle(.link)
+        }
+        .font(.callout)
+        .disabled(!status.cliInstalled)
     }
 
     private func submitCode() {
@@ -390,6 +424,23 @@ struct CredentialForm: View {
                 failed = true
                 message = error.localizedDescription
             }
+        }
+    }
+}
+
+/// Shown when the signed-in Claude account has no paid plan.
+struct PaidPlanNotice: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("This Claude account doesn't have a paid plan", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(.callout.weight(.semibold))
+            Text("Claude Code, which Clod runs on, needs Claude Pro, Max, Team or Enterprise. Upgrade at claude.ai, then sign in again. Or sign in with an Anthropic API account and pay for what you use.")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Upgrade at claude.ai") { NSWorkspace.shared.open(URL(string: "https://claude.ai/upgrade")!) }
+                .buttonStyle(.link)
+                .font(.callout)
         }
     }
 }

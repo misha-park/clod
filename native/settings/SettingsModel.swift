@@ -45,6 +45,8 @@ final class SettingsModel: ObservableObject {
     // State published by Clod
     @Published private(set) var accessibilityGranted: Bool?
     @Published private(set) var setup = SetupStatus()
+    /// A newer Clod on GitHub, found by Clod's daily check
+    @Published private(set) var update: (version: String, url: URL)?
     @Published private(set) var defaultDir = "~/Documents/clod-scratch"
     @Published private(set) var models: [ModelOption] = [
         ModelOption(id: "fable", label: "Fable"),
@@ -138,6 +140,12 @@ final class SettingsModel: ObservableObject {
         guard let d = readJSON(stateURL) else { return }
         accessibilityGranted = d["accessibilityGranted"] as? Bool
         if let s = d["setup"] as? [String: Any] { setup = SetupStatus(s) }
+        if let u = d["update"] as? [String: Any], let version = u["version"] as? String,
+           let link = (u["url"] as? String).flatMap(URL.init(string:)) {
+            update = (version, link)
+        } else {
+            update = nil
+        }
         if let dir = d["defaultDir"] as? String { defaultDir = dir }
         if let list = d["models"] as? [[String: Any]] {
             let parsed = list.compactMap { m -> ModelOption? in

@@ -184,6 +184,8 @@ export interface Message {
   timestamp: number
   /** Output of a `!` shell command, rendered as a monospaced block */
   shell?: boolean
+  /** A friendly error's button: open setup, or Settings → Account */
+  action?: 'setup' | 'account'
 }
 
 export interface RunResult {
@@ -374,6 +376,7 @@ export const IPC = {
   SETTINGS_CHANGED: 'clod:settings-changed',
   PUBLISH_STATE: 'clod:publish-state',
   OPEN_SETTINGS: 'clod:open-settings',
+  OPEN_SETUP: 'clod:open-setup',
   START_WINDOW_DRAG: 'clod:start-window-drag',
   RESET_WINDOW_POSITION: 'clod:reset-window-position',
   SET_WINDOW_POSITION: 'clod:set-window-position',

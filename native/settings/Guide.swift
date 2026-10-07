@@ -68,6 +68,13 @@ struct GuideTopic: Identifiable {
             "In **Ask** mode, Clod shows a card before Claude edits files or runs commands, so you can allow or deny it.",
             "In **Auto** mode, Claude goes ahead without asking. Only use it for work you trust.",
         ]),
+        GuideTopic(title: "Privacy", symbol: "hand.raised.fill", color: .blue, tips: [
+            "Clod has no tracking or analytics. The only thing it contacts by itself is GitHub, once a day, to check for a new version.",
+            "Your messages go to Anthropic through Claude Code, the same as using Claude Code in Terminal.",
+            "Claude only sees files and folders you give it, and in **Ask** mode it asks before changing anything.",
+            "A pasted token or API key is stored encrypted with your Mac's Keychain and only passed to Claude Code.",
+            "Clod keeps a log on your Mac (`~/.clod-debug.log`) for fixing problems. It stays on your Mac unless you copy it.",
+        ]),
         GuideTopic(title: "Buttons at the top", symbol: "square.on.square", color: .indigo, tips: [
             "**Copy** copies the whole conversation. Each code block and reply also has its own copy button.",
             "**Resize** switches between narrow and full width. Double-click it to go back to the default size.",

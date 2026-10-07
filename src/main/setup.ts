@@ -9,16 +9,16 @@
  * Commands are newline-delimited JSON: {"id": 1, "cmd": "refresh", ...}; each
  * gets one reply: {"id": 1, "ok": true} or {"id": 1, "ok": false, "error": "…"}.
  */
-import { app, shell, systemPreferences } from 'electron'
+import { app, clipboard, shell, systemPreferences } from 'electron'
 import { ChildProcess, execFile, spawn } from 'child_process'
 import { createServer, Server, Socket } from 'net'
-import { chmodSync, existsSync, rmSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
+import { chmodSync, existsSync, rmSync, writeFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { homedir, tmpdir } from 'os'
 import { getCliEnv, getClaudeEnv, resetCliPath } from './cli-env'
 import { clearCredential, CredentialKind, getStoredCredential, storeCredential } from './credentials'
-import { publishState } from './settings-file'
-import { log as _log } from './logger'
+import { getSettings, publishState } from './settings-file'
+import { log as _log, LOG_FILE, readLogTail } from './logger'
 
 function log(msg: string): void {
   _log('setup', msg)
@@ -36,6 +36,8 @@ interface TaskState {
   message: string
   /** Sign-in page, once the CLI has printed it */
   url?: string
+  /** Signing in in a Terminal window instead of through Clod */
+  terminal?: boolean
 }
 
 interface SetupState {
@@ -211,6 +213,47 @@ function login(method: 'claudeai' | 'console'): void {
   })
 }
 
+let terminalPoll: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Fallback: sign in in a Terminal window, where `claude auth login` is known
+ * to work. A .command file opens in Terminal without needing the Automation
+ * permission. Clod checks every few seconds until the sign-in shows up.
+ */
+function loginInTerminal(method: 'claudeai' | 'console'): void {
+  if (!state.cli.installed) throw new Error('Install Claude Code first.')
+  if (loginProcess) cancelLogin()
+  const file = join(tmpdir(), 'Clod sign-in.command')
+  writeFileSync(file, `#!/bin/bash
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+echo "Signing in to Claude Code for Clod…"
+echo
+claude auth login${method === 'console' ? ' --console' : ''}
+echo
+echo "All done. You can close this window and go back to Clod."
+`, { mode: 0o700 })
+  execFile('/usr/bin/open', ['-a', 'Terminal', file])
+  log(`Signing in in Terminal (${method})`)
+  setTask({ kind: 'login', state: 'running', message: 'Finish signing in in the Terminal window.', terminal: true })
+
+  if (terminalPoll) clearInterval(terminalPoll)
+  const started = Date.now()
+  terminalPoll = setInterval(async () => {
+    if (state.task?.kind !== 'login' || !state.task.terminal || Date.now() - started > 15 * 60 * 1000) {
+      clearInterval(terminalPoll!)
+      terminalPoll = null
+      return
+    }
+    await refreshAuth()
+    if (state.auth.loggedIn) {
+      clearInterval(terminalPoll!)
+      terminalPoll = null
+      onAuthChanged()
+      setTask({ kind: 'login', state: 'done', message: 'Signed in.' })
+    }
+  }, 3000)
+}
+
 /** The code shown in the browser after signing in, for the CLI's "Paste code here" prompt. */
 function submitCode(code: string): void {
   if (!loginProcess?.stdin) throw new Error('Start signing in first.')
@@ -219,6 +262,7 @@ function submitCode(code: string): void {
 }
 
 function cancelLogin(): void {
+  if (terminalPoll) { clearInterval(terminalPoll); terminalPoll = null }
   const child = loginProcess
   loginProcess = null
   child?.kill('SIGTERM')
@@ -271,6 +315,52 @@ function openPrivacyPane(name: Permission): void {
   shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${PRIVACY_PANES[name]}`)
 }
 
+// ─── Debug info and uninstalling ───
+
+/** Settings worth including in a bug report (no prompts, paths or keys). */
+const DEBUG_SETTING_KEYS = ['themeMode', 'expandedUI', 'windowPosition', 'hotkeyMode', 'permissionMode',
+  'preferredModel', 'historyLayout', 'thinkingAnimation', 'openAtLogin', 'setupCompleted']
+
+/** Copy a summary for bug reports: versions, setup status, settings and the recent log. */
+function copyDebugInfo(): void {
+  const settings = getSettings()
+  const p = state.permissions
+  const lines = [
+    `Clod ${app.getVersion()} · macOS ${process.getSystemVersion()} · ${process.arch}`,
+    `Claude Code: ${state.cli.installed ? state.cli.version : 'not installed'}`,
+    `Signed in: ${state.auth.loggedIn ? `yes (${state.auth.method ?? '?'}${state.auth.subscription ? `, ${state.auth.subscription}` : ''})` : 'no'}` +
+      (state.credential ? ` · pasted ${state.credential}` : ''),
+    `Permissions: accessibility ${p.accessibility ? 'allowed' : 'not allowed'} · screen ${p.screen} · terminal ${p.automation}`,
+    `Settings: ${DEBUG_SETTING_KEYS.map((k) => `${k}=${JSON.stringify(settings[k])}`).join(' ')}`,
+    '',
+    '--- Recent log ---',
+    // Strip the email address if it appears; keep the rest as written.
+    readLogTail(40 * 1024).replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '<email>'),
+  ]
+  clipboard.writeText(lines.join('\n'))
+  log('Copied debug info')
+}
+
+/**
+ * Remove Clod: its login item, settings, stored credential and log, then move
+ * the app to the Bin and quit. Claude Code itself is left installed.
+ */
+function uninstall(): void {
+  log('Uninstalling Clod')
+  app.setLoginItemSettings({ openAtLogin: false })
+  clearCredential()
+  stopSetupServer()
+  // …/Clod.app/Contents/MacOS/Clod → …/Clod.app
+  const bundle = dirname(dirname(dirname(app.getPath('exe'))))
+  const trash = bundle.endsWith('.app') && app.isPackaged ? shell.trashItem(bundle) : Promise.resolve()
+  trash.catch(() => {}).finally(() => {
+    for (const path of [join(app.getPath('appData'), 'Clod'), LOG_FILE, join(homedir(), '.clod-debug.log')]) {
+      try { rmSync(path, { recursive: true, force: true }) } catch {}
+    }
+    app.exit(0)
+  })
+}
+
 // ─── Control socket ───
 
 async function handle(msg: Record<string, any>): Promise<void> {
@@ -278,6 +368,7 @@ async function handle(msg: Record<string, any>): Promise<void> {
     case 'refresh': return refreshSetupState()
     case 'installCli': return installCli()
     case 'login': return login(msg.method === 'console' ? 'console' : 'claudeai')
+    case 'loginInTerminal': return loginInTerminal(msg.method === 'console' ? 'console' : 'claudeai')
     case 'submitCode': return submitCode(String(msg.code ?? ''))
     case 'cancelLogin': return cancelLogin()
     case 'logout': return logout()
@@ -302,6 +393,11 @@ async function handle(msg: Record<string, any>): Promise<void> {
     case 'openPrivacyPane':
       if (!PRIVACY_PANES[msg.name as Permission]) throw new Error('Unknown permission.')
       return openPrivacyPane(msg.name)
+    case 'copyDebugInfo': return copyDebugInfo()
+    case 'uninstall':
+      // Reply first; the app is gone a moment later.
+      setTimeout(uninstall, 300)
+      return
     case 'relaunch':
       app.relaunch()
       app.exit(0)

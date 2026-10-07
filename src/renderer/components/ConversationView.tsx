@@ -936,6 +936,15 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
       }}
     >
       {message.content}
+      {message.action && (
+        <button
+          onClick={() => window.clod.openSetup(message.action!)}
+          className="block mt-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium"
+          style={{ background: colors.accent, color: '#fff' }}
+        >
+          {message.action === 'setup' ? 'Open setup' : 'Sign in'}
+        </button>
+      )}
     </div>
   )
 

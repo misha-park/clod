@@ -9,9 +9,10 @@ import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './m
 import { log as _log, flushLogs } from './logger'
 import { getCliEnv, getClaudeEnv } from './cli-env'
 import { isSetUp, refreshPermissionState, startSetupServer, stopSetupServer } from './setup'
+import { startUpdateChecks, type AvailableUpdate } from './updates'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
-import { registerOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
+import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
 import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, validPresetWidth, windowSizeFor } from '../shared/layout'
 import { readSessionMeta, updateSessionMeta, searchSessions, transcriptPath, transcriptToMarkdown } from './sessions'
@@ -251,11 +252,17 @@ function createWindow(): void {
     log('Settings changed externally — applying')
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.SETTINGS_CHANGED, settings)
   })
+  let accessibilityWasGranted: boolean | null = null
   // Keep the Accessibility status shown in the settings app current
   // (publishState only writes when the value actually changes).
   setInterval(() => {
     if (process.platform !== 'darwin') return
-    publishState({ accessibilityGranted: systemPreferences.isTrustedAccessibilityClient(false) })
+    const granted = systemPreferences.isTrustedAccessibilityClient(false)
+    // Just allowed in System Settings: restart the key hook so double-tap
+    // Option works straight away, without restarting Clod.
+    if (granted && accessibilityWasGranted === false) restartOptionDoubleTap()
+    accessibilityWasGranted = granted
+    publishState({ accessibilityGranted: granted })
     refreshPermissionState()
   }, 3000)
 }
@@ -385,6 +392,10 @@ ipcMain.on(IPC.PUBLISH_STATE, (_e, partial: Record<string, unknown>) => {
   if (partial && typeof partial === 'object') publishState(partial)
 })
 ipcMain.on(IPC.OPEN_SETTINGS, () => openSettingsApp())
+ipcMain.on(IPC.OPEN_SETUP, (_e, target: 'setup' | 'account') => {
+  if (target === 'setup') saveSettings({ showSetup: true })
+  openSettingsApp()
+})
 
 /** Path of the bundled native settings app (or the local build in dev). */
 function settingsAppPath(): string {
@@ -1262,14 +1273,22 @@ app.whenReady().then(async () => {
   tray = new Tray(trayIcon)
   tray.setToolTip('Clod — Claude Code UI')
   tray.on('click', () => toggleWindow('tray click'))
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Show Clod', click: () => showWindow('tray menu') },
-      { label: 'Settings…', accelerator: 'Command+,', click: () => openSettingsApp() },
-      { type: 'separator' },
-      { label: 'Quit', click: () => { app.quit() } },
-    ])
-  )
+  const buildTrayMenu = (update: AvailableUpdate | null) => {
+    tray?.setContextMenu(
+      Menu.buildFromTemplate([
+        ...(update ? [
+          { label: `Clod ${update.version} is available…`, click: () => { shell.openExternal(update.url) } },
+          { type: 'separator' as const },
+        ] : []),
+        { label: 'Show Clod', click: () => showWindow('tray menu') },
+        { label: 'Settings…', accelerator: 'Command+,', click: () => openSettingsApp() },
+        { type: 'separator' },
+        { label: 'Quit', click: () => { app.quit() } },
+      ])
+    )
+  }
+  buildTrayMenu(null)
+  startUpdateChecks((update) => buildTrayMenu(update))
 
   // app 'activate' fires when macOS brings the app to the foreground (e.g. after
   // webContents.focus() triggers applicationDidBecomeActive on some macOS versions).

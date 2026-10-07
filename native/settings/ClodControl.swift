@@ -88,6 +88,8 @@ struct SetupStatus: Equatable {
     var taskState: String?
     var taskMessage = ""
     var taskURL: String?
+    /// Signing in in a Terminal window (the fallback)
+    var taskTerminal = false
 
     /// False until Clod has published anything (e.g. an older Clod is running).
     var known = false
@@ -115,10 +117,22 @@ struct SetupStatus: Equatable {
             taskState = task["state"] as? String
             taskMessage = task["message"] as? String ?? ""
             taskURL = task["url"] as? String
+            taskTerminal = task["terminal"] as? Bool ?? false
         }
     }
 
     var isRunning: Bool { taskState == "running" }
+
+    /// Signed in with a claude.ai account that has no paid plan. Claude Code
+    /// needs Pro, Max, Team or Enterprise, or an API account instead.
+    var needsPaidPlan: Bool {
+        guard loggedIn, credential == nil, authMethod == "claude.ai" else { return false }
+        let plan = (subscription ?? "").lowercased()
+        return !["pro", "max", "team", "enterprise"].contains { plan.contains($0) }
+    }
+
+    /// Signed in with an account that can use Claude Code.
+    var canUseClaude: Bool { loggedIn && !needsPaidPlan }
     func task(_ kind: String) -> Bool { taskKind == kind }
 
     /// One line describing who Claude Code is signed in as.

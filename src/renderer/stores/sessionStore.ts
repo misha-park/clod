@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
 import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { useThemeStore } from '../theme'
+import { explainError } from '../../shared/errors'
 import notificationSrc from '../../../resources/notification.mp3'
 
 // ─── Known models ───
@@ -320,6 +321,22 @@ function loadSavedTabs(): SavedTabs {
 
 // Read once at launch, before startup state changes overwrite the saved list.
 const savedTabsAtLaunch = loadSavedTabs()
+
+/**
+ * The chat message for a failed run: a plain-English explanation (with a
+ * setup or sign-in button) for known problems, otherwise the raw error.
+ */
+function errorMessage(message: string, stderrTail: string[] = []): Message {
+  const raw = `${message}${stderrTail.length > 0 ? '\n\n' + stderrTail.slice(-5).join('\n') : ''}`
+  const explained = explainError(raw)
+  return {
+    id: nextMsgId(),
+    role: 'system',
+    content: `Error: ${explained ? explained.text : raw}`,
+    timestamp: Date.now(),
+    ...(explained?.action ? { action: explained.action } : {}),
+  }
+}
 
 export const useSessionStore = create<State>((set, get) => ({
   tabs: [initialTab],
@@ -1082,7 +1099,7 @@ export const useSessionStore = create<State>((set, get) => ({
             updated.permissionDenied = null
             updated.messages = [
               ...updated.messages,
-              { id: nextMsgId(), role: 'system', content: `Error: ${event.message}`, timestamp: Date.now() },
+              errorMessage(event.message),
             ]
             break
 
@@ -1176,12 +1193,7 @@ export const useSessionStore = create<State>((set, get) => ({
             ? t.messages
             : [
                 ...t.messages,
-                {
-                  id: nextMsgId(),
-                  role: 'system' as const,
-                  content: `Error: ${error.message}${error.stderrTail.length > 0 ? '\n\n' + error.stderrTail.slice(-5).join('\n') : ''}`,
-                  timestamp: Date.now(),
-                },
+                errorMessage(error.message, error.stderrTail),
               ],
         }
       }),

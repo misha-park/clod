@@ -27,6 +27,20 @@ export function registerOptionDoubleTap(onDoubleTap: () => void): void {
   }
 }
 
+/**
+ * Restart the key hook, e.g. once Accessibility has just been granted: a hook
+ * started without the permission never receives keys, even after it's allowed.
+ */
+export function restartOptionDoubleTap(): void {
+  try { uIOhook.stop() } catch {}
+  try {
+    uIOhook.start()
+    log('Key hook restarted')
+  } catch (err) {
+    log(`Key hook failed to restart: ${(err as Error).message}`)
+  }
+}
+
 export function stopOptionDoubleTap(): void {
   try {
     uIOhook.stop()

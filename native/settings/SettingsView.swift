@@ -7,6 +7,10 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            if let update = model.update {
+                Section { UpdateBanner(version: update.version, url: update.url) }
+            }
+
             Section {
                 HeaderView()
             }
@@ -141,6 +145,8 @@ struct SettingsView: View {
             }
 
             PermissionsSection()
+
+            HelpSection()
         }
         .formStyle(.grouped)
         .tint(.clodAccent)

@@ -1,10 +1,14 @@
-import { appendFile, appendFileSync } from 'fs'
+import { appendFile, appendFileSync, closeSync, openSync, readSync, statSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
 const LOG_FILE = join(homedir(), '.clod-debug.log')
 const FLUSH_INTERVAL_MS = 500
 const MAX_BUFFER_SIZE = 64
+/** The log is trimmed to its last KEEP_BYTES once it grows past MAX_LOG_BYTES. */
+const MAX_LOG_BYTES = 2 * 1024 * 1024
+const KEEP_BYTES = 512 * 1024
+const TRIM_CHECK_MS = 60 * 60 * 1000
 
 let buffer: string[] = []
 let timer: ReturnType<typeof setInterval> | null = null
@@ -28,6 +32,38 @@ function ensureTimer(): void {
     timer.unref()
   }
 }
+
+/** The last `bytes` of the log, starting at a line boundary. */
+export function readLogTail(bytes: number): string {
+  try {
+    const size = statSync(LOG_FILE).size
+    const start = Math.max(0, size - bytes)
+    const fd = openSync(LOG_FILE, 'r')
+    try {
+      const buf = Buffer.alloc(size - start)
+      readSync(fd, buf, 0, buf.length, start)
+      const text = buf.toString('utf-8')
+      return start > 0 ? text.slice(text.indexOf('\n') + 1) : text
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    return ''
+  }
+}
+
+/** Keep the log from growing without limit: drop all but its most recent part. */
+function trimLog(): void {
+  try {
+    if (statSync(LOG_FILE).size <= MAX_LOG_BYTES) return
+    flushLogs()
+    writeFileSync(LOG_FILE, readLogTail(KEEP_BYTES))
+  } catch {}
+}
+
+trimLog()
+const trimTimer = setInterval(trimLog, TRIM_CHECK_MS)
+if (typeof trimTimer === 'object' && 'unref' in trimTimer) trimTimer.unref()
 
 export function log(tag: string, msg: string): void {
   buffer.push(`[${new Date().toISOString()}] [${tag}] ${msg}\n`)

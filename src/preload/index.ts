@@ -62,6 +62,8 @@ export interface ClodAPI {
   onSettingsChanged(callback: (settings: Record<string, unknown>) => void): () => void
   publishState(partial: Record<string, unknown>): void
   openSettings(): void
+  /** Open setup ('setup') or the settings window at Account ('account') */
+  openSetup(target: 'setup' | 'account'): void
 }
 
 const api: ClodAPI = {
@@ -168,6 +170,7 @@ const api: ClodAPI = {
   },
   publishState: (partial) => ipcRenderer.send(IPC.PUBLISH_STATE, partial),
   openSettings: () => ipcRenderer.send(IPC.OPEN_SETTINGS),
+  openSetup: (target) => ipcRenderer.send(IPC.OPEN_SETUP, target),
 }
 
 contextBridge.exposeInMainWorld('clod', api)

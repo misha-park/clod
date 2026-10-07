@@ -25,6 +25,9 @@ struct AccountSection: View {
             } label: {
                 RowLabel("Account", symbol: "person.crop.circle.fill", color: .clodAccent)
             }
+            if status.needsPaidPlan {
+                PaidPlanNotice()
+            }
             if status.credential != nil {
                 LabeledContent {
                     Button("Remove") { Task { await send("clearCredential") } }
@@ -89,7 +92,7 @@ struct PermissionsSection: View {
         } header: {
             Text("Permissions")
         } footer: {
-            Text("After allowing a permission in System Settings, quit and reopen Clod if it doesn't take effect.")
+            Text("Accessibility works as soon as it's allowed. Screen Recording may need Clod to quit and reopen, which macOS offers to do.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -123,6 +126,94 @@ struct PermissionRow: View {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+}
+
+/// Shown at the top of the settings when GitHub has a newer Clod.
+struct UpdateBanner: View {
+    let version: String
+    let url: URL
+
+    var body: some View {
+        HStack(spacing: 10) {
+            SettingIcon(symbol: "arrow.down.circle.fill", color: .green)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Clod \(version) is available").font(.headline)
+                Text("Download it, then drag it into Applications to replace this version.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Download") { NSWorkspace.shared.open(url) }
+                .buttonStyle(.borderedProminent)
+        }
+    }
+}
+
+/// Settings → Help: version, licence, debug info for bug reports, uninstalling.
+struct HelpSection: View {
+    @State private var copied = false
+    @State private var confirmUninstall = false
+    @State private var error: String?
+
+    var body: some View {
+        Section {
+            LabeledContent {
+                Text(SettingsHeaderStatus.version).foregroundStyle(.secondary)
+            } label: {
+                RowLabel("Version", symbol: "info.circle.fill", color: .gray)
+            }
+            LabeledContent {
+                Button(copied ? "Copied" : "Copy debug info") {
+                    Task {
+                        do {
+                            try await ClodControl.send("copyDebugInfo")
+                            copied = true
+                            error = nil
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            copied = false
+                        } catch {
+                            self.error = error.localizedDescription
+                        }
+                    }
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    RowLabel("Report a problem", symbol: "ladybug.fill", color: .red)
+                    Text("Copies versions, setup status and the recent log. Read it before sharing: the log can mention folder and file names.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.leading, 32)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            LabeledContent {
+                Button("Uninstall Clod…", role: .destructive) { confirmUninstall = true }
+            } label: {
+                RowLabel("Uninstall", symbol: "trash.fill", color: .gray)
+            }
+            if let error {
+                Text(error).foregroundStyle(.orange).font(.callout)
+            }
+        } header: {
+            Text("Help")
+        } footer: {
+            Text("Clod is open source under the MIT licence. Based on Clui CC by Lucas Couto.")
+                .foregroundStyle(.secondary)
+        }
+        .alert("Uninstall Clod?", isPresented: $confirmUninstall) {
+            Button("Uninstall", role: .destructive) {
+                Task {
+                    do {
+                        try await ClodControl.send("uninstall")
+                        NSApp.terminate(nil)
+                    } catch {
+                        self.error = error.localizedDescription
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This moves Clod to the Bin and deletes its settings, saved sign-in and log. Your conversations in Claude Code and Claude Code itself are kept.")
         }
     }
 }
