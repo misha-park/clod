@@ -41,10 +41,10 @@ struct ClodSettingsApp: App {
         Window("Clod Settings", id: "settings") {
             RootView()
                 .environmentObject(model)
-                .frame(minWidth: 420, idealWidth: 480, maxWidth: 900)
-                .frame(minHeight: 420, idealHeight: 620)
+                .frame(minWidth: 640, idealWidth: 760, maxWidth: 1100)
+                .frame(minHeight: 460, idealHeight: 600)
         }
-        .defaultSize(width: 480, height: 620)
+        .defaultSize(width: 760, height: 600)
         .windowResizability(.contentMinSize)
         .defaultPosition(.center)
     }

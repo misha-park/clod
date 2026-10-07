@@ -51,8 +51,6 @@ struct AccountSection: View {
             if let error {
                 Text(error).foregroundStyle(.orange).font(.callout)
             }
-        } header: {
-            Text("Account")
         } footer: {
             if !status.known {
                 Text("Open Clod to see your account.").foregroundStyle(.secondary)
@@ -89,8 +87,6 @@ struct PermissionsSection: View {
             PermissionRow(title: "Automation", detail: "The Terminal button",
                           symbol: "apple.terminal", color: .gray, name: "automation",
                           granted: status.automation == "granted")
-        } header: {
-            Text("Permissions")
         } footer: {
             Text("Accessibility works as soon as it's allowed. Screen Recording may need Clod to quit and reopen, which macOS offers to do.")
                 .foregroundStyle(.secondary)
@@ -194,8 +190,6 @@ struct HelpSection: View {
             if let error {
                 Text(error).foregroundStyle(.orange).font(.callout)
             }
-        } header: {
-            Text("Help")
         } footer: {
             Text("Clod is open source under the MIT licence. Based on Clui CC by Lucas Couto.")
                 .foregroundStyle(.secondary)
@@ -214,6 +208,27 @@ struct HelpSection: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This moves Clod to the Bin and deletes its settings, saved sign-in and log. Your conversations in Claude Code and Claude Code itself are kept.")
+        }
+    }
+}
+
+/// Help → Updates: whether this is the newest Clod, from Clod's daily check.
+struct UpdatesSection: View {
+    @EnvironmentObject var model: SettingsModel
+
+    var body: some View {
+        Section {
+            if let update = model.update {
+                UpdateBanner(version: update.version, url: update.url)
+            } else {
+                LabeledContent {
+                    Text("Up to date").foregroundStyle(.secondary)
+                } label: {
+                    RowLabel("Updates", symbol: "arrow.down.circle.fill", color: .green)
+                }
+            }
+        } footer: {
+            Text("Clod checks GitHub for a new version once a day.").foregroundStyle(.secondary)
         }
     }
 }
