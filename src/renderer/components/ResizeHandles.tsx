@@ -35,7 +35,7 @@ export function ResizeHandles({ anchor, canResizeHeight, onStart, onEnd }: Props
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     const st = useThemeStore.getState()
-    const size = overlaySize(st.expandedUI, st.overlayWidth, st.overlayHeight)
+    const size = overlaySize(st.expandedUI, st.overlayWidth, st.overlayHeight, st)
     start.current = {
       x: e.screenX, y: e.screenY,
       w: size.cardWidth, h: size.conversationHeight, edges,

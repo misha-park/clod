@@ -20,15 +20,18 @@ final class SettingsModel: ObservableObject {
     let settingsURL = directory.appendingPathComponent("settings.json")
     let stateURL = directory.appendingPathComponent("state.json")
 
-    static let defaultPlaceholder = "What do you want this time ..."
+    static let defaultPlaceholder = "Ask Claude anything…"
 
     // Settings (keys and defaults mirror the overlay's stores)
     @Published private(set) var themeMode = "dark"
     @Published private(set) var soundEnabled = true
     @Published private(set) var expandedUI = true
+    @Published private(set) var narrowWidth = SettingsModel.defaultNarrowWidth
+    @Published private(set) var wideWidth = SettingsModel.defaultWideWidth
     @Published private(set) var windowPosition = "center"
     @Published private(set) var inputPlaceholder = SettingsModel.defaultPlaceholder
     @Published private(set) var borderAnimation = true
+    @Published private(set) var thinkingAnimation = "mitosis"
     @Published private(set) var hotkeyMode = "double-option"
     @Published private(set) var hotkeyAccelerator = ""
     @Published private(set) var openAtLogin = true
@@ -36,9 +39,12 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var permissionMode = "ask"
     @Published private(set) var defaultDirOverride: String?
     @Published private(set) var historyLayout = "drawer"
+    /// Set by Clod on first launch (or by "Run setup again") to show the setup steps.
+    @Published private(set) var showSetup = false
 
     // State published by Clod
     @Published private(set) var accessibilityGranted: Bool?
+    @Published private(set) var setup = SetupStatus()
     @Published private(set) var defaultDir = "~/Documents/clod-scratch"
     @Published private(set) var models: [ModelOption] = [
         ModelOption(id: "fable", label: "Fable"),
@@ -70,6 +76,21 @@ final class SettingsModel: ObservableObject {
         apply(dict)
     }
 
+    // Card widths of the narrow / wide presets (mirror PRESETS in src/shared/layout.ts).
+    static let defaultNarrowWidth = 460
+    static let defaultWideWidth = 700
+    static let presetWidthRange = 360...2400
+
+    static func presetWidth(_ value: Any?) -> Int? {
+        guard let n = value as? NSNumber, presetWidthRange.contains(n.intValue) else { return nil }
+        return n.intValue
+    }
+
+    /** Saves a preset width; the default is stored as null so later default changes apply. */
+    func setPresetWidth(_ key: String, _ value: Int, default defaultValue: Int) {
+        set(key, value == defaultValue ? nil : value)
+    }
+
     func setHotkey(mode: String, accelerator: String) {
         var dict = readJSON(settingsURL) ?? [:]
         dict["hotkeyMode"] = mode
@@ -95,9 +116,13 @@ final class SettingsModel: ObservableObject {
         themeMode = (d["themeMode"] as? String) == "light" ? "light" : "dark"
         soundEnabled = d["soundEnabled"] as? Bool ?? true
         expandedUI = d["expandedUI"] as? Bool ?? true
+        narrowWidth = SettingsModel.presetWidth(d["narrowWidth"]) ?? SettingsModel.defaultNarrowWidth
+        wideWidth = SettingsModel.presetWidth(d["wideWidth"]) ?? SettingsModel.defaultWideWidth
         windowPosition = (d["windowPosition"] as? String) == "right" ? "right" : "center"
         inputPlaceholder = d["inputPlaceholder"] as? String ?? SettingsModel.defaultPlaceholder
         borderAnimation = d["borderAnimation"] as? Bool ?? true
+        let animation = d["thinkingAnimation"] as? String ?? ""
+        thinkingAnimation = ["claude", "tetra", "origami", "leapfrog", "mitosis"].contains(animation) ? animation : "mitosis"
         hotkeyMode = (d["hotkeyMode"] as? String) == "accelerator" ? "accelerator" : "double-option"
         hotkeyAccelerator = d["hotkeyAccelerator"] as? String ?? ""
         openAtLogin = d["openAtLogin"] as? Bool ?? true
@@ -105,12 +130,14 @@ final class SettingsModel: ObservableObject {
         permissionMode = (d["permissionMode"] as? String) == "auto" ? "auto" : "ask"
         defaultDirOverride = d["defaultDirOverride"] as? String
         historyLayout = (d["historyLayout"] as? String) == "card" ? "card" : "drawer"
+        showSetup = d["showSetup"] as? Bool ?? false
     }
 
     private func reloadState() {
         stateMtime = modificationDate(stateURL)
         guard let d = readJSON(stateURL) else { return }
         accessibilityGranted = d["accessibilityGranted"] as? Bool
+        if let s = d["setup"] as? [String: Any] { setup = SetupStatus(s) }
         if let dir = d["defaultDir"] as? String { defaultDir = dir }
         if let list = d["models"] as? [[String: Any]] {
             let parsed = list.compactMap { m -> ModelOption? in

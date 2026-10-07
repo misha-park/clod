@@ -574,6 +574,11 @@ export class ControlPlane extends EventEmitter {
     this.emit('tab-status-change', tabId, newStatus, oldStatus)
   }
 
+  /** After a sign-in change: idle processes restart with the new credentials on the next message. */
+  restartIdleProcesses(): void {
+    this.runManager.endIdle()
+  }
+
   // ─── Shutdown ───
 
   shutdown(): void {

@@ -3,12 +3,17 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var model: SettingsModel
+    @State private var showWidthPresets = false
 
     var body: some View {
         Form {
             Section {
                 HeaderView()
             }
+
+            GuideSection()
+
+            AccountSection()
 
             Section("General") {
                 Toggle(isOn: bind(\.openAtLogin, "openAtLogin")) {
@@ -35,7 +40,21 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 Toggle(isOn: bind(\.expandedUI, "expandedUI")) {
-                    RowLabel("Full width", symbol: "arrow.left.and.right", color: .teal)
+                    HStack {
+                        RowLabel("Full width", symbol: "arrow.left.and.right", color: .teal)
+                        Spacer()
+                        Button("Change width presets…") { showWidthPresets = true }
+                            .controlSize(.small)
+                            .popover(isPresented: $showWidthPresets, arrowEdge: .bottom) {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("Width presets").font(.headline)
+                                    presetWidthRow("Narrow", \.narrowWidth, "narrowWidth", SettingsModel.defaultNarrowWidth)
+                                    presetWidthRow("Full width", \.wideWidth, "wideWidth", SettingsModel.defaultWideWidth)
+                                }
+                                .padding(14)
+                                .frame(width: 300)
+                            }
+                    }
                 }
                 Picker(selection: bind(\.historyLayout, "historyLayout")) {
                     Text("Beside Clod").tag("drawer")
@@ -46,6 +65,15 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 Toggle(isOn: bind(\.borderAnimation, "borderAnimation")) {
                     RowLabel("Input glow", symbol: "sparkles", color: .purple)
+                }
+                Picker(selection: bind(\.thinkingAnimation, "thinkingAnimation")) {
+                    Text("Mitosis").tag("mitosis")
+                    Text("Claude").tag("claude")
+                    Text("Tetra").tag("tetra")
+                    Text("Origami").tag("origami")
+                    Text("Leapfrog").tag("leapfrog")
+                } label: {
+                    RowLabel("Thinking animation", symbol: "circle.grid.cross", color: .orange)
                 }
                 TextField(text: bind(\.inputPlaceholder, "inputPlaceholder"),
                           prompt: Text(SettingsModel.defaultPlaceholder)) {
@@ -112,32 +140,7 @@ struct SettingsView: View {
                 Text("Auto-approve lets Claude run tools without asking first.").foregroundStyle(.secondary)
             }
 
-            if let granted = model.accessibilityGranted {
-                Section {
-                    LabeledContent {
-                        if granted {
-                            Label("Granted", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        } else {
-                            HStack {
-                                Label("Not granted", systemImage: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
-                                Button("Open Privacy Settings…", action: openAccessibilitySettings)
-                                    .tint(nil)
-                            }
-                        }
-                    } label: {
-                        RowLabel("Accessibility", symbol: "accessibility", color: .blue)
-                    }
-                } header: {
-                    Text("Permissions")
-                } footer: {
-                    if !granted {
-                        Text("Double-tap ⌥ needs Accessibility. After granting it, quit and reopen Clod.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
+            PermissionsSection()
         }
         .formStyle(.grouped)
         .tint(.clodAccent)
@@ -148,6 +151,24 @@ struct SettingsView: View {
     /// A binding that reads from the model and writes the key to settings.json.
     private func bind<T>(_ path: KeyPath<SettingsModel, T>, _ key: String) -> Binding<T> {
         Binding(get: { model[keyPath: path] }, set: { model.set(key, $0) })
+    }
+
+    /// A stepper for one preset's card width, with a reset to its default.
+    private func presetWidthRow(_ title: String, _ path: KeyPath<SettingsModel, Int>, _ key: String, _ defaultValue: Int) -> some View {
+        let value = Binding(get: { model[keyPath: path] },
+                            set: { model.setPresetWidth(key, $0, default: defaultValue) })
+        return HStack {
+            Stepper(value: value, in: SettingsModel.presetWidthRange, step: 20) {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    Text("\(value.wrappedValue) pt").monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            Button("Reset") { value.wrappedValue = defaultValue }
+                .buttonStyle(.borderless)
+                .disabled(value.wrappedValue == defaultValue)
+        }
     }
 
     private var hotkeyModeBinding: Binding<String> {
@@ -172,9 +193,4 @@ struct SettingsView: View {
         }
     }
 
-    private func openAccessibilitySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
-        }
-    }
 }

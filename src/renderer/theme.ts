@@ -4,6 +4,8 @@ import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '
  * Colors derived from ChatCN oklch system and design-fixed.html reference.
  */
 import { create } from 'zustand'
+import { validPresetWidth } from '../shared/layout'
+import { THINKING_ANIMATIONS, type ThinkingAnimation } from './components/ThinkingIndicator'
 
 // ─── Color palettes ───
 
@@ -287,7 +289,7 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 export type WindowPosition = 'center' | 'right'
 export type HotkeyMode = 'double-option' | 'accelerator'
 
-export const DEFAULT_PLACEHOLDER = 'What do you want this time ...'
+export const DEFAULT_PLACEHOLDER = 'Ask Claude anything…'
 
 interface ThemeState {
   isDark: boolean
@@ -299,6 +301,8 @@ interface ThemeState {
   inputPlaceholder: string
   /** Whether the animated orange border on the input bar is enabled */
   borderAnimation: boolean
+  /** Dot animation shown while a response is running */
+  thinkingAnimation: ThinkingAnimation
   /** How the overlay is toggled: double-tap Option (default) or a custom accelerator */
   hotkeyMode: HotkeyMode
   /** Electron accelerator string used when hotkeyMode === 'accelerator' */
@@ -308,6 +312,9 @@ interface ThemeState {
   /** User-resized card width / conversation height (null = narrow/wide preset) */
   overlayWidth: number | null
   overlayHeight: number | null
+  /** Custom card widths for the narrow / wide presets (null = built-in default) */
+  narrowWidth: number | null
+  wideWidth: number | null
   /** OS-reported dark mode — used when themeMode is 'system' */
   _systemIsDark: boolean
   setIsDark: (isDark: boolean) => void
@@ -317,12 +324,14 @@ interface ThemeState {
   setWindowPosition: (pos: WindowPosition) => void
   setInputPlaceholder: (text: string) => void
   setBorderAnimation: (on: boolean) => void
+  setThinkingAnimation: (animation: ThinkingAnimation) => void
   setHotkey: (mode: HotkeyMode, accelerator: string) => void
   setOpenAtLogin: (on: boolean) => void
   /** Set a custom overlay size; pass persist=false while dragging, true on release. */
   setOverlaySize: (width: number | null, height: number | null, persist?: boolean) => void
   /** Back to the narrow preset at the default height. */
   resetOverlaySize: () => void
+  setPresetWidths: (narrowWidth: number | null, wideWidth: number | null) => void
   /** Called by OS theme change listener — updates system value */
   setSystemTheme: (isDark: boolean) => void
 }
@@ -355,11 +364,14 @@ interface PersistedSettings {
   windowPosition: WindowPosition
   inputPlaceholder: string
   borderAnimation: boolean
+  thinkingAnimation: ThinkingAnimation
   hotkeyMode: HotkeyMode
   hotkeyAccelerator: string
   openAtLogin: boolean
   overlayWidth: number | null
   overlayHeight: number | null
+  narrowWidth: number | null
+  wideWidth: number | null
 }
 
 const DEFAULT_SETTINGS: PersistedSettings = {
@@ -369,11 +381,14 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   windowPosition: 'center',
   inputPlaceholder: DEFAULT_PLACEHOLDER,
   borderAnimation: true,
+  thinkingAnimation: 'mitosis',
   hotkeyMode: 'double-option',
   hotkeyAccelerator: '',
   openAtLogin: true,
   overlayWidth: null,
   overlayHeight: null,
+  narrowWidth: null,
+  wideWidth: null,
 }
 
 function validateSettings(p: Record<string, any>): PersistedSettings {
@@ -386,11 +401,14 @@ function validateSettings(p: Record<string, any>): PersistedSettings {
         windowPosition: p.windowPosition === 'right' ? 'right' : 'center',
         inputPlaceholder: typeof p.inputPlaceholder === 'string' ? p.inputPlaceholder : DEFAULT_PLACEHOLDER,
         borderAnimation: typeof p.borderAnimation === 'boolean' ? p.borderAnimation : true,
+        thinkingAnimation: THINKING_ANIMATIONS.includes(p.thinkingAnimation) ? p.thinkingAnimation : 'mitosis',
         hotkeyMode: p.hotkeyMode === 'accelerator' ? 'accelerator' : 'double-option',
         hotkeyAccelerator: typeof p.hotkeyAccelerator === 'string' ? p.hotkeyAccelerator : '',
         openAtLogin: typeof p.openAtLogin === 'boolean' ? p.openAtLogin : true,
         overlayWidth: typeof p.overlayWidth === 'number' && p.overlayWidth > 0 ? Math.round(p.overlayWidth) : null,
         overlayHeight: typeof p.overlayHeight === 'number' && p.overlayHeight > 0 ? Math.round(p.overlayHeight) : null,
+        narrowWidth: validPresetWidth(p.narrowWidth),
+        wideWidth: validPresetWidth(p.wideWidth),
       }
     }
   } catch {}
@@ -419,11 +437,14 @@ export const useThemeStore = create<ThemeState>((set, get) => {
       windowPosition: s.windowPosition,
       inputPlaceholder: s.inputPlaceholder,
       borderAnimation: s.borderAnimation,
+      thinkingAnimation: s.thinkingAnimation,
       hotkeyMode: s.hotkeyMode,
       hotkeyAccelerator: s.hotkeyAccelerator,
       openAtLogin: s.openAtLogin,
       overlayWidth: s.overlayWidth,
       overlayHeight: s.overlayHeight,
+      narrowWidth: s.narrowWidth,
+      wideWidth: s.wideWidth,
     })
   }
 
@@ -435,11 +456,14 @@ export const useThemeStore = create<ThemeState>((set, get) => {
     windowPosition: saved.windowPosition,
     inputPlaceholder: saved.inputPlaceholder,
     borderAnimation: saved.borderAnimation,
+    thinkingAnimation: saved.thinkingAnimation,
     hotkeyMode: saved.hotkeyMode,
     hotkeyAccelerator: saved.hotkeyAccelerator,
     openAtLogin: saved.openAtLogin,
     overlayWidth: saved.overlayWidth,
     overlayHeight: saved.overlayHeight,
+    narrowWidth: saved.narrowWidth,
+    wideWidth: saved.wideWidth,
     _systemIsDark: true,
     setIsDark: (isDark) => {
       set({ isDark })
@@ -464,6 +488,11 @@ export const useThemeStore = create<ThemeState>((set, get) => {
       set({ overlayWidth: width, overlayHeight: height })
       if (persistNow) persist()
     },
+    setPresetWidths: (narrowWidth, wideWidth) => {
+      // Drop a custom width so the edited preset takes effect straight away.
+      set({ narrowWidth, wideWidth, overlayWidth: null })
+      persist()
+    },
     resetOverlaySize: () => {
       set({ expandedUI: false, overlayWidth: null, overlayHeight: null })
       persist()
@@ -479,6 +508,10 @@ export const useThemeStore = create<ThemeState>((set, get) => {
     },
     setBorderAnimation: (on) => {
       set({ borderAnimation: on })
+      persist()
+    },
+    setThinkingAnimation: (animation) => {
+      set({ thinkingAnimation: animation })
       persist()
     },
     setOpenAtLogin: (on) => {
@@ -520,9 +553,13 @@ onExternalSettingsChange((raw) => {
   if (next.overlayWidth !== s.overlayWidth || next.overlayHeight !== s.overlayHeight) {
     s.setOverlaySize(next.overlayWidth, next.overlayHeight)
   }
+  if (next.narrowWidth !== s.narrowWidth || next.wideWidth !== s.wideWidth) {
+    s.setPresetWidths(next.narrowWidth, next.wideWidth)
+  }
   if (next.windowPosition !== s.windowPosition) s.setWindowPosition(next.windowPosition)
   if (next.inputPlaceholder !== s.inputPlaceholder) s.setInputPlaceholder(next.inputPlaceholder)
   if (next.borderAnimation !== s.borderAnimation) s.setBorderAnimation(next.borderAnimation)
+  if (next.thinkingAnimation !== s.thinkingAnimation) s.setThinkingAnimation(next.thinkingAnimation)
   if (next.openAtLogin !== s.openAtLogin) s.setOpenAtLogin(next.openAtLogin)
   if (next.hotkeyMode !== s.hotkeyMode || next.hotkeyAccelerator !== s.hotkeyAccelerator) {
     s.setHotkey(next.hotkeyMode, next.hotkeyAccelerator)

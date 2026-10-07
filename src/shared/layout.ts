@@ -32,14 +32,27 @@ export interface OverlaySize {
   customHeight: boolean
 }
 
+/** Card widths the narrow and wide presets use; either can be customised in settings. */
+export interface PresetWidths {
+  narrowWidth?: number | null
+  wideWidth?: number | null
+}
+
+/** A saved preset width, or null when the value is missing or out of range. */
+export function validPresetWidth(value: unknown): number | null {
+  return typeof value === 'number' && value >= MIN_CARD_WIDTH && value <= 4000 ? Math.round(value) : null
+}
+
 export function overlaySize(
   expandedUI: boolean,
   overlayWidth: number | null | undefined,
   overlayHeight: number | null | undefined,
+  presetWidths: PresetWidths = {},
 ): OverlaySize {
   const preset = expandedUI ? PRESETS.wide : PRESETS.narrow
+  const presetWidth = (expandedUI ? presetWidths.wideWidth : presetWidths.narrowWidth) ?? preset.cardWidth
   return {
-    cardWidth: typeof overlayWidth === 'number' ? overlayWidth : preset.cardWidth,
+    cardWidth: typeof overlayWidth === 'number' ? overlayWidth : presetWidth,
     conversationHeight: typeof overlayHeight === 'number' ? overlayHeight : preset.conversationHeight,
     customHeight: typeof overlayHeight === 'number',
   }

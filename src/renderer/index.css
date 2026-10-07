@@ -151,14 +151,6 @@ input::placeholder {
 }
 
 /* ─── Bouncing dots for thinking ─── */
-@keyframes bounce-dot {
-  0%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-4px); }
-}
-.animate-bounce-dot {
-  animation: bounce-dot 1.2s ease-in-out infinite;
-}
-
 /* ─── Stacking circle buttons ─── */
 .circles-out {
   position: absolute;

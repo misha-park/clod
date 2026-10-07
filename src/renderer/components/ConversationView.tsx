@@ -13,6 +13,7 @@ import {
 import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
+import { ThinkingIndicator } from './ThinkingIndicator'
 import { useColors, useThemeStore } from '../theme'
 import { overlaySize } from '../../shared/layout'
 import type { Message } from '../../shared/types'
@@ -75,8 +76,11 @@ export function ConversationView() {
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const overlayWidth = useThemeStore((s) => s.overlayWidth)
   const overlayHeight = useThemeStore((s) => s.overlayHeight)
+  const thinkingAnimation = useThemeStore((s) => s.thinkingAnimation)
+  const narrowWidth = useThemeStore((s) => s.narrowWidth)
+  const wideWidth = useThemeStore((s) => s.wideWidth)
   // Custom (resized) height is fixed so dragging the top edge always shows; presets stay max-heights.
-  const convSize = overlaySize(expandedUI, overlayWidth, overlayHeight)
+  const convSize = overlaySize(expandedUI, overlayWidth, overlayHeight, { narrowWidth, wideWidth })
 
   const tab = tabs.find((t) => t.id === activeTabId)
 
@@ -246,11 +250,7 @@ export function ConversationView() {
         <div className="flex items-center gap-1.5 text-[11px] min-w-0">
           {isRunning && (
             <span className="flex items-center gap-1.5">
-              <span className="flex gap-[3px]">
-                <span className="w-[4px] h-[4px] rounded-full animate-bounce-dot" style={{ background: colors.statusRunning, animationDelay: '0ms' }} />
-                <span className="w-[4px] h-[4px] rounded-full animate-bounce-dot" style={{ background: colors.statusRunning, animationDelay: '150ms' }} />
-                <span className="w-[4px] h-[4px] rounded-full animate-bounce-dot" style={{ background: colors.statusRunning, animationDelay: '300ms' }} />
-              </span>
+              <ThinkingIndicator animation={thinkingAnimation} color={colors.statusRunning} />
               <span style={{ color: colors.textSecondary }}>{tab.currentActivity || 'Working...'}</span>
             </span>
           )}
@@ -436,7 +436,7 @@ function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: b
   const colors = useColors()
   const content = (
     <div
-      className="text-[13.5px] leading-[1.55] px-3.5 py-2 max-w-[85%]"
+      className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%]"
       style={{
         background: colors.userBubble,
         color: colors.userBubbleText,
@@ -478,7 +478,7 @@ function QueuedMessage({ content }: { content: string }) {
       className="flex justify-end py-1.5"
     >
       <div
-        className="text-[13.5px] leading-[1.55] px-3.5 py-2 max-w-[85%]"
+        className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%]"
         style={{
           background: colors.userBubble,
           color: colors.userBubbleText,
@@ -630,7 +630,7 @@ const AssistantMessage = React.memo(function AssistantMessage({
 
   const inner = (
     <div className="group/msg relative">
-      <div className="text-[13.5px] leading-[1.6] prose-cloud min-w-0 max-w-[92%]">
+      <div className="text-[13px] leading-[1.6] prose-cloud min-w-0 max-w-[92%]">
         <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={markdownComponents}>
           {message.content}
         </Markdown>

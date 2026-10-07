@@ -6,7 +6,7 @@ import { StreamParser } from '../stream-parser'
 import { normalize } from './event-normalizer'
 import { buildUserContent } from './message-content'
 import { log as _log } from '../logger'
-import { getCliEnv } from '../cli-env'
+import { getCliEnv, getClaudeEnv } from '../cli-env'
 import type { ClaudeEvent, RunOptions, EnrichedError } from '../../shared/types'
 
 const MAX_RING_LINES = 100
@@ -130,6 +130,7 @@ export class RunManager extends EventEmitter {
 
   private _findClaudeBinary(): string {
     const candidates = [
+      join(homedir(), '.local/bin/claude'), // Claude Code's own installer
       '/usr/local/bin/claude',
       '/opt/homebrew/bin/claude',
       join(homedir(), '.npm-global/bin/claude'),
@@ -154,7 +155,7 @@ export class RunManager extends EventEmitter {
   }
 
   private _getEnv(): NodeJS.ProcessEnv {
-    const env = getCliEnv()
+    const env = getClaudeEnv()
     const binDir = this.claudeBinary.substring(0, this.claudeBinary.lastIndexOf('/'))
     if (env.PATH && !env.PATH.includes(binDir)) {
       env.PATH = `${binDir}:${env.PATH}`
@@ -244,6 +245,13 @@ export class RunManager extends EventEmitter {
     }
   }
 
+  /** Shut down tab processes that are not running a request, so the next message starts a fresh one. */
+  endIdle(): void {
+    for (const [tabId, proc] of Array.from(this.tabProcs.entries())) {
+      if (!proc.currentRequestId) this.endTab(tabId)
+    }
+  }
+
   /** Shut down every tab process (app quit). */
   endAll(): void {
     for (const tabId of Array.from(this.tabProcs.keys())) this.endTab(tabId)
@@ -307,6 +315,9 @@ export class RunManager extends EventEmitter {
     }
     // Always tell Claude it's inside CLOD (additive, doesn't replace base prompt)
     args.push('--append-system-prompt', CLOD_SYSTEM_HINT)
+
+    // Claude Code may have been installed (by Clod's setup) since launch.
+    if (!this.claudeBinary.includes('/')) this.claudeBinary = this._findClaudeBinary()
 
     if (DEBUG) {
       log(`Starting run ${requestId}: ${this.claudeBinary} ${args.join(' ')}`)

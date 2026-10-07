@@ -27,6 +27,8 @@ export default function App() {
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const overlayWidth = useThemeStore((s) => s.overlayWidth)
   const overlayHeight = useThemeStore((s) => s.overlayHeight)
+  const narrowWidth = useThemeStore((s) => s.narrowWidth)
+  const wideWidth = useThemeStore((s) => s.wideWidth)
   // While the user drags a resize handle: no size animations, no click-through.
   const [resizing, setResizing] = useState(false)
   const historyOpen = useSessionStore((s) => s.historyOpen)
@@ -248,7 +250,7 @@ export default function App() {
   const marketplaceOpen = useSessionStore((s) => s.marketplaceOpen)
 
   // Layout dimensions — narrow/wide preset, or the user's resized size
-  const size = overlaySize(expandedUI, overlayWidth, overlayHeight)
+  const size = overlaySize(expandedUI, overlayWidth, overlayHeight, { narrowWidth, wideWidth })
   const contentWidth = size.cardWidth
   const cardExpandedWidth = size.cardWidth
   const cardCollapsedWidth = size.cardWidth - 30

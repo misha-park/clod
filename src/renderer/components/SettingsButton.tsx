@@ -20,11 +20,11 @@ export function SettingsButton() {
   return (
     <button
       onClick={() => window.clod.openSettings()}
-      className="flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full transition-colors"
+      className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"
       style={{ color: colors.textTertiary }}
       title="Settings (⌘,)"
     >
-      <GearSix size={16} />
+      <GearSix size={14} />
     </button>
   )
 }

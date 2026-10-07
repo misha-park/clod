@@ -7,12 +7,13 @@ import { ControlPlane } from './claude/control-plane'
 import { ensureSkills, type SkillStatus } from './skills/installer'
 import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './marketplace/catalog'
 import { log as _log, flushLogs } from './logger'
-import { getCliEnv } from './cli-env'
+import { getCliEnv, getClaudeEnv } from './cli-env'
+import { isSetUp, refreshPermissionState, startSetupServer, stopSetupServer } from './setup'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 import { registerOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
-import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, windowSizeFor } from '../shared/layout'
+import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, validPresetWidth, windowSizeFor } from '../shared/layout'
 import { readSessionMeta, updateSessionMeta, searchSessions, transcriptPath, transcriptToMarkdown } from './sessions'
 
 const DEBUG_MODE = process.env.CLOD_DEBUG === '1'
@@ -165,7 +166,10 @@ function createWindow(): void {
   // Start at the size the saved overlay needs, so it doesn't resize after load.
   const s = getSettings()
   const initial = windowSizeFor(
-    overlaySize(s.expandedUI !== false, s.overlayWidth as number | null, s.overlayHeight as number | null),
+    overlaySize(s.expandedUI !== false, s.overlayWidth as number | null, s.overlayHeight as number | null, {
+      narrowWidth: validPresetWidth(s.narrowWidth),
+      wideWidth: validPresetWidth(s.wideWidth),
+    }),
     screenWidth, screenHeight,
   )
   windowWidth = initial.width
@@ -252,6 +256,7 @@ function createWindow(): void {
   setInterval(() => {
     if (process.platform !== 'darwin') return
     publishState({ accessibilityGranted: systemPreferences.isTrustedAccessibilityClient(false) })
+    refreshPermissionState()
   }, 3000)
 }
 
@@ -515,7 +520,7 @@ ipcMain.handle(IPC.START, async () => {
   // froze the main process (and so the overlay) at every launch.
   const { execFile } = require('child_process')
   const runCli = (args: string[]): Promise<string> => new Promise((resolve) => {
-    execFile('claude', args, { encoding: 'utf-8', timeout: 5000, env: getCliEnv() },
+    execFile('claude', args, { encoding: 'utf-8', timeout: 5000, env: getClaudeEnv() },
       (err: Error | null, stdout: string) => resolve(err ? '' : String(stdout).trim()))
   })
   const [versionOut, authOut] = await Promise.all([runCli(['-v']), runCli(['auth', 'status'])])
@@ -1193,8 +1198,19 @@ app.whenReady().then(async () => {
     app.dock.hide()
   }
 
+  // First launch: until Claude Code is installed and signed in, open the
+  // guided setup (in the settings app) instead of prompting for permissions.
+  // Users who already have it all are marked as set up without seeing it.
+  await startSetupServer(() => controlPlane.restartIdleProcesses())
+  if (getSettings().setupCompleted !== true) {
+    if (isSetUp()) saveSettings({ setupCompleted: true })
+    else {
+      saveSettings({ showSetup: true })
+      openSettingsApp()
+    }
+  }
   // Request permissions upfront so the user is never interrupted mid-session.
-  await requestPermissions()
+  if (getSettings().setupCompleted === true) await requestPermissions()
 
   installContentSecurityPolicy()
 
@@ -1266,6 +1282,7 @@ app.on('will-quit', () => {
   stopOptionDoubleTap()
   globalShortcut.unregisterAll()
   controlPlane.shutdown()
+  stopSetupServer()
   flushLogs()
 })
 

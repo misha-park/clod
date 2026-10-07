@@ -37,7 +37,7 @@ function StatusDot({ status, hasUnread, hasPermission }: { status: TabStatus; ha
 }
 
 /** Round icon button used in the tab bar's button group. */
-export const GROUP_BUTTON_CLASS = 'flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full transition-colors'
+export const GROUP_BUTTON_CLASS = 'flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors'
 
 /** Opens the active tab's session in Terminal (`claude --resume`). */
 function OpenInCliButton() {
@@ -51,7 +51,7 @@ function OpenInCliButton() {
       title="Open this session in Terminal"
       aria-label="Open in CLI"
     >
-      <Terminal size={15} />
+      <Terminal size={13} />
     </button>
   )
 }
@@ -87,11 +87,11 @@ function CopyConversationButton() {
       <AnimatePresence mode="wait" initial={false}>
         {copied ? (
           <motion.span key="check" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.15 }} className="flex">
-            <Check size={15} weight="bold" />
+            <Check size={13} weight="bold" />
           </motion.span>
         ) : (
           <motion.span key="copy" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.15 }} className="flex">
-            <Copy size={15} />
+            <Copy size={13} />
           </motion.span>
         )}
       </AnimatePresence>
@@ -116,7 +116,7 @@ export function TabStrip() {
       className="flex items-center no-drag"
       // Compact: extra bottom padding so the ~10px that tucks behind the input
       // bar still leaves ~8px of visible grey below the pill — even with the top.
-      style={{ padding: isExpanded ? '10px 0 8px' : '10px 0 20px' }}
+      style={{ padding: isExpanded ? '8px 0 6px' : '8px 0 18px' }}
     >
       {/* Scrollable tabs area — clipped by master card edge */}
       <div className="relative min-w-0 flex-1">
@@ -146,13 +146,13 @@ export function TabStrip() {
                   transition={{ duration: 0.15 }}
                   onClick={() => selectTab(tab.id)}
                   data-tab-id={tab.id}
-                  className="group flex items-center gap-2 cursor-pointer select-none flex-shrink-0 max-w-[190px] transition-all duration-150"
+                  className="group flex items-center gap-2 cursor-pointer select-none flex-shrink-0 max-w-[170px] transition-all duration-150"
                   style={{
                     background: isActive ? colors.tabActive : 'transparent',
                     border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
                     borderRadius: 9999,
-                    padding: '6px 14px',
-                    fontSize: 13,
+                    padding: '4px 12px',
+                    fontSize: 12,
                     color: isActive ? colors.textPrimary : colors.textTertiary,
                     fontWeight: isActive ? 500 : 400,
                   }}
@@ -170,7 +170,7 @@ export function TabStrip() {
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isActive ? '0.5' : '0' }}
                     >
-                      <X size={10} />
+                      <X size={9} />
                     </button>
                   )}
                 </motion.div>
@@ -179,12 +179,12 @@ export function TabStrip() {
           </AnimatePresence>
           <button
             onClick={() => createTab()}
-            className="flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full transition-colors"
+            className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"
             style={{ color: colors.textTertiary }}
             title="New tab"
             aria-label="New tab"
           >
-            <Plus size={15} />
+            <Plus size={13} />
           </button>
         </div>
       </div>
@@ -192,7 +192,7 @@ export function TabStrip() {
       {/* Button group — copy, past conversations, resize, CLI | settings */}
       <div
         className="flex items-center flex-shrink-0 ml-1 mr-3 rounded-full"
-        style={{ background: colors.controlGroupBg, padding: 3, gap: 2 }}
+        style={{ background: colors.controlGroupBg, padding: 2, gap: 2 }}
       >
         <CopyConversationButton />
         <HistoryButton />
@@ -204,10 +204,10 @@ export function TabStrip() {
           title={`${expandedUI ? 'Switch to narrow view' : 'Switch to wide view'} · double-click to reset size`}
           aria-label="Toggle wide/narrow view"
         >
-          <ArrowsOutLineHorizontal size={15} />
+          <ArrowsOutLineHorizontal size={13} />
         </button>
         <OpenInCliButton />
-        <span className="flex-shrink-0" style={{ width: 1, height: 16, background: colors.containerBorder, margin: '0 2px' }} />
+        <span className="flex-shrink-0" style={{ width: 1, height: 14, background: colors.containerBorder, margin: '0 2px' }} />
         <SettingsButton />
       </div>
     </div>

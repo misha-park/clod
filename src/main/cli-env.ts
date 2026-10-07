@@ -1,4 +1,7 @@
 import { execSync } from 'child_process'
+import { homedir } from 'os'
+import { join } from 'path'
+import { credentialEnv } from './credentials'
 
 let cachedPath: string | null = null
 
@@ -21,8 +24,10 @@ function getCliPath(): string {
   // Start from current process PATH.
   appendPathEntries(ordered, seen, process.env.PATH)
 
-  // Add common binary locations used on macOS (Homebrew + system).
-  appendPathEntries(ordered, seen, '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin')
+  // Add common binary locations used on macOS: Claude Code's own installer
+  // (~/.local/bin, which a fresh install may not have added to the shell yet),
+  // Homebrew and the system.
+  appendPathEntries(ordered, seen, `${join(homedir(), '.local', 'bin')}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`)
 
   // Try interactive login shell first so nvm/asdf/etc. PATH hooks are loaded.
   const pathCommands = [
@@ -44,6 +49,11 @@ function getCliPath(): string {
   return cachedPath
 }
 
+/** Forget the discovered PATH, e.g. after Claude Code has just been installed. */
+export function resetCliPath(): void {
+  cachedPath = null
+}
+
 export function getCliEnv(extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -54,3 +64,12 @@ export function getCliEnv(extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return env
 }
 
+
+/**
+ * Environment for running the claude CLI itself: getCliEnv plus the credential
+ * pasted into Clod, if any. Kept separate so the token or API key is not
+ * passed to the user's own shell commands.
+ */
+export function getClaudeEnv(extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return getCliEnv({ ...extraEnv, ...credentialEnv() })
+}

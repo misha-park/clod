@@ -39,7 +39,7 @@ struct ClodSettingsApp: App {
 
     var body: some Scene {
         Window("Clod Settings", id: "settings") {
-            SettingsView()
+            RootView()
                 .environmentObject(model)
                 .frame(minWidth: 420, idealWidth: 480, maxWidth: 900)
                 .frame(minHeight: 420, idealHeight: 620)
@@ -47,5 +47,18 @@ struct ClodSettingsApp: App {
         .defaultSize(width: 480, height: 620)
         .windowResizability(.contentMinSize)
         .defaultPosition(.center)
+    }
+}
+
+/// Shows the first-run setup while Clod asks for it, otherwise the settings.
+struct RootView: View {
+    @EnvironmentObject var model: SettingsModel
+
+    var body: some View {
+        if model.showSetup {
+            SetupView()
+        } else {
+            SettingsView()
+        }
     }
 }
