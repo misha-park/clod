@@ -92,6 +92,19 @@ else
   echo "macOS will ask for permissions again after this install (see README.md)."
 fi
 
+# Quit the running Clod and its settings window first; otherwise the old
+# copy keeps running and "open" below just brings it to the front.
+if pgrep -x "${APP_NAME}" >/dev/null || pgrep -x "${APP_NAME} Settings" >/dev/null; then
+  echo "Quitting the running ${APP_NAME}..."
+  osascript -e "quit app \"${APP_NAME}\"" >/dev/null 2>&1 || true
+  pkill -x "${APP_NAME} Settings" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -x "${APP_NAME}" >/dev/null || break
+    sleep 0.5
+  done
+  pkill -x "${APP_NAME}" 2>/dev/null || true
+fi
+
 if [ -d "$DEST" ]; then
   echo "Replacing existing ${APP_NAME} in /Applications..."
   rm -rf "$DEST"

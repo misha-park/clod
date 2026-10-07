@@ -1302,6 +1302,9 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   controlPlane.shutdown()
   stopSetupServer()
+  // Close the settings window too, so after an update it can't keep running
+  // the old version.
+  try { require('child_process').spawnSync('/usr/bin/pkill', ['-x', 'Clod Settings']) } catch {}
   flushLogs()
 })
 
