@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, Copy, Check, ArrowsOutLineHorizontal } from '@phosphor-icons/react'
+import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { HistoryButton } from './history/HistoryButton'
 import { SettingsButton } from './SettingsButton'
@@ -36,6 +36,26 @@ function StatusDot({ status, hasUnread, hasPermission }: { status: TabStatus; ha
   )
 }
 
+/** Round icon button used in the tab bar's button group. */
+export const GROUP_BUTTON_CLASS = 'flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full transition-colors'
+
+/** Opens the active tab's session in Terminal (`claude --resume`). */
+function OpenInCliButton() {
+  const colors = useColors()
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+  return (
+    <button
+      onClick={() => { if (tab) window.clod.openInTerminal(tab.claudeSessionId, tab.workingDirectory) }}
+      className={GROUP_BUTTON_CLASS}
+      style={{ color: colors.textTertiary }}
+      title="Open this session in Terminal"
+      aria-label="Open in CLI"
+    >
+      <Terminal size={15} />
+    </button>
+  )
+}
+
 /** Copies the active conversation (as plain "You:/Claude:" text) to the clipboard
  *  so it can be pasted into the Claude app, with a brief tick confirmation. */
 function CopyConversationButton() {
@@ -60,18 +80,18 @@ function CopyConversationButton() {
     <button
       onClick={handleCopy}
       disabled={!hasContent}
-      className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+      className={GROUP_BUTTON_CLASS}
       style={{ color: copied ? colors.accent : colors.textTertiary, opacity: hasContent ? 1 : 0.4 }}
       title="Copy conversation for Claude"
     >
       <AnimatePresence mode="wait" initial={false}>
         {copied ? (
           <motion.span key="check" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.15 }} className="flex">
-            <Check size={14} weight="bold" />
+            <Check size={15} weight="bold" />
           </motion.span>
         ) : (
           <motion.span key="copy" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.15 }} className="flex">
-            <Copy size={14} />
+            <Copy size={15} />
           </motion.span>
         )}
       </AnimatePresence>
@@ -96,7 +116,7 @@ export function TabStrip() {
       className="flex items-center no-drag"
       // Compact: extra bottom padding so the ~10px that tucks behind the input
       // bar still leaves ~8px of visible grey below the pill — even with the top.
-      style={{ padding: isExpanded ? '8px 0' : '8px 0 18px' }}
+      style={{ padding: isExpanded ? '10px 0 8px' : '10px 0 20px' }}
     >
       {/* Scrollable tabs area — clipped by master card edge */}
       <div className="relative min-w-0 flex-1">
@@ -104,7 +124,7 @@ export function TabStrip() {
           className="flex items-center gap-1 overflow-x-auto min-w-0"
           style={{
             scrollbarWidth: 'none',
-            paddingLeft: 8,
+            paddingLeft: 12,
             // Extra right breathing room so clipped tabs fade out before the edge.
             paddingRight: 14,
             // Right-only content fade so the parent card's own animated background
@@ -125,13 +145,14 @@ export function TabStrip() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
                   onClick={() => selectTab(tab.id)}
-                  className="group flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0 max-w-[160px] transition-all duration-150"
+                  data-tab-id={tab.id}
+                  className="group flex items-center gap-2 cursor-pointer select-none flex-shrink-0 max-w-[190px] transition-all duration-150"
                   style={{
                     background: isActive ? colors.tabActive : 'transparent',
                     border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
                     borderRadius: 9999,
-                    padding: '4px 10px',
-                    fontSize: 12,
+                    padding: '6px 14px',
+                    fontSize: 13,
                     color: isActive ? colors.textPrimary : colors.textTertiary,
                     fontWeight: isActive ? 500 : 400,
                   }}
@@ -156,35 +177,37 @@ export function TabStrip() {
               )
             })}
           </AnimatePresence>
+          <button
+            onClick={() => createTab()}
+            className="flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full transition-colors"
+            style={{ color: colors.textTertiary }}
+            title="New tab"
+            aria-label="New tab"
+          >
+            <Plus size={15} />
+          </button>
         </div>
       </div>
 
-      {/* Pinned action buttons — always visible on the right */}
-      <div className="flex items-center gap-0.5 flex-shrink-0 ml-1 pr-2">
+      {/* Button group — copy, past conversations, resize, CLI | settings */}
+      <div
+        className="flex items-center flex-shrink-0 ml-1 mr-3 rounded-full"
+        style={{ background: colors.controlGroupBg, padding: 3, gap: 2 }}
+      >
         <CopyConversationButton />
-
+        <HistoryButton />
         <button
           onClick={() => setExpandedUI(!expandedUI)}
           onDoubleClick={() => useThemeStore.getState().resetOverlaySize()}
-          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+          className={GROUP_BUTTON_CLASS}
           style={{ color: expandedUI ? colors.accent : colors.textTertiary }}
           title={`${expandedUI ? 'Switch to narrow view' : 'Switch to wide view'} · double-click to reset size`}
           aria-label="Toggle wide/narrow view"
         >
-          <ArrowsOutLineHorizontal size={14} />
+          <ArrowsOutLineHorizontal size={15} />
         </button>
-
-        <button
-          onClick={() => createTab()}
-          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
-          style={{ color: colors.textTertiary }}
-          title="New tab"
-        >
-          <Plus size={14} />
-        </button>
-
-        <HistoryButton />
-
+        <OpenInCliButton />
+        <span className="flex-shrink-0" style={{ width: 1, height: 16, background: colors.containerBorder, margin: '0 2px' }} />
         <SettingsButton />
       </div>
     </div>

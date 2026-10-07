@@ -53,6 +53,8 @@ const darkColors = {
 
   // Tab
   tabActive: '#353530',
+  /** Soft fill behind the tab bar's button group */
+  controlGroupBg: 'rgba(255, 255, 255, 0.045)',
   tabActiveBorder: '#4a4a45',
   tabInactive: 'transparent',
   tabHover: 'rgba(255, 255, 255, 0.05)',
@@ -187,6 +189,8 @@ const lightColors = {
 
   // Tab
   tabActive: '#edeae0',
+  /** Soft fill behind the tab bar's button group */
+  controlGroupBg: 'rgba(0, 0, 0, 0.04)',
   tabActiveBorder: '#dddad2',
   tabInactive: 'transparent',
   tabHover: 'rgba(0, 0, 0, 0.04)',

@@ -80,16 +80,16 @@ input::placeholder {
 .prose-cloud pre {
   background: var(--clod-code-bg);
   border: 1px solid var(--clod-container-border);
-  border-radius: 10px;
-  padding: 0.75em 1em;
+  border-radius: 18px;
+  padding: 0.85em 1.15em;
   font-size: 12px;
   overflow-x: auto;
 }
 .prose-cloud code {
   background: var(--clod-accent-light);
   color: var(--clod-accent);
-  padding: 0.15em 0.35em;
-  border-radius: 4px;
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
   font-size: 0.9em;
 }
 .prose-cloud pre code {

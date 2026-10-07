@@ -387,7 +387,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         onClick={handleCopy}
-        className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded-md opacity-0 group-hover/code:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 flex items-center justify-center w-6 h-6 rounded-full opacity-0 group-hover/code:opacity-100 transition-opacity"
         style={{ background: colors.surfaceHover, color: copied ? colors.statusComplete : colors.textTertiary }}
         title="Copy code"
         aria-label="Copy code"
@@ -436,12 +436,12 @@ function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: b
   const colors = useColors()
   const content = (
     <div
-      className="text-[13px] leading-[1.5] px-3 py-1.5 max-w-[85%]"
+      className="text-[13.5px] leading-[1.55] px-3.5 py-2 max-w-[85%]"
       style={{
         background: colors.userBubble,
         color: colors.userBubbleText,
         border: `1px solid ${colors.userBubbleBorder}`,
-        borderRadius: '14px 14px 4px 14px',
+        borderRadius: '22px 22px 8px 22px',
       }}
     >
       {message.content}
@@ -478,12 +478,12 @@ function QueuedMessage({ content }: { content: string }) {
       className="flex justify-end py-1.5"
     >
       <div
-        className="text-[13px] leading-[1.5] px-3 py-1.5 max-w-[85%]"
+        className="text-[13.5px] leading-[1.55] px-3.5 py-2 max-w-[85%]"
         style={{
           background: colors.userBubble,
           color: colors.userBubbleText,
           border: `1px dashed ${colors.userBubbleBorder}`,
-          borderRadius: '14px 14px 4px 14px',
+          borderRadius: '22px 22px 8px 22px',
           opacity: 0.6,
         }}
       >
@@ -630,7 +630,7 @@ const AssistantMessage = React.memo(function AssistantMessage({
 
   const inner = (
     <div className="group/msg relative">
-      <div className="text-[13px] leading-[1.6] prose-cloud min-w-0 max-w-[92%]">
+      <div className="text-[13.5px] leading-[1.6] prose-cloud min-w-0 max-w-[92%]">
         <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={markdownComponents}>
           {message.content}
         </Markdown>

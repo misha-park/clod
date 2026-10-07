@@ -157,6 +157,13 @@ export default function App() {
 
   const draggingFiles = useFolderDrop()
 
+  // Dev/QA snapshots (CLOD_SNAPSHOT_DIR): the main process asks the overlay to open.
+  useEffect(() => {
+    const open = () => useSessionStore.setState({ isExpanded: true })
+    window.addEventListener('clod-debug-expand', open)
+    return () => window.removeEventListener('clod-debug-expand', open)
+  }, [])
+
   // Manual window drag — bypasses -webkit-app-region conflicts with setIgnoreMouseEvents
   useEffect(() => {
     if (!window.clod?.startWindowDrag) return
@@ -342,15 +349,15 @@ export default function App() {
               borderColor: draggingFiles ? colors.accent : colors.containerBorder,
               boxShadow: isExpanded ? colors.cardShadow : colors.cardShadowCollapsed,
               // Compact: rounded top only, square bottom. Expanded: all four rounded.
-              borderBottomLeftRadius: isExpanded ? 20 : 0,
-              borderBottomRightRadius: isExpanded ? 20 : 0,
+              borderTopLeftRadius: isExpanded ? 34 : 30,
+              borderTopRightRadius: isExpanded ? 34 : 30,
+              borderBottomLeftRadius: isExpanded ? 34 : 0,
+              borderBottomRightRadius: isExpanded ? 34 : 0,
             }}
             transition={resizing ? { duration: 0 } : TRANSITION}
             style={{
               borderWidth: 1,
               borderStyle: 'solid',
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
               position: 'relative',
               zIndex: isExpanded ? 20 : 10,
             }}
@@ -410,7 +417,7 @@ export default function App() {
             <div
               data-clod-ui
               className="glass-surface w-full"
-              style={{ position: 'relative', minHeight: 50, borderRadius: 20, padding: '0 6px 0 16px', background: colors.inputPillBg }}
+              style={{ position: 'relative', minHeight: 50, borderRadius: 26, padding: '0 7px 0 20px', background: colors.inputPillBg }}
               onFocusCapture={() => setInputFocused(true)}
               onBlurCapture={(e) => {
                 // Only blur when focus leaves the pill entirely (not when moving

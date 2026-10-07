@@ -242,6 +242,7 @@ function createWindow(): void {
   }
 
   startCursorTracking()
+  if (process.env.CLOD_SNAPSHOT_DIR) scheduleSnapshots(process.env.CLOD_SNAPSHOT_DIR)
   watchSettings((settings) => {
     log('Settings changed externally — applying')
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.SETTINGS_CHANGED, settings)
@@ -252,6 +253,25 @@ function createWindow(): void {
     if (process.platform !== 'darwin') return
     publishState({ accessibilityGranted: systemPreferences.isTrustedAccessibilityClient(false) })
   }, 3000)
+}
+
+// Dev/QA: with CLOD_SNAPSHOT_DIR set, write PNGs of the overlay closed and open,
+// then quit — a way to check the UI without Screen Recording permission.
+function scheduleSnapshots(dir: string): void {
+  const { writeFileSync } = require('fs')
+  const shot = async (name: string) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    const image = await mainWindow.webContents.capturePage()
+    writeFileSync(join(dir, name), image.toPNG())
+    log(`Snapshot written: ${join(dir, name)}`)
+  }
+  mainWindow?.webContents.once('did-finish-load', () => {
+    setTimeout(async () => {
+      await shot('closed.png')
+      await mainWindow?.webContents.executeJavaScript("window.dispatchEvent(new Event('clod-debug-expand'))")
+      setTimeout(async () => { await shot('open.png'); app.quit() }, 1500)
+    }, 4000)
+  })
 }
 
 // Click-through is normally toggled from forwarded mousemove events, but macOS

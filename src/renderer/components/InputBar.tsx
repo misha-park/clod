@@ -509,6 +509,8 @@ function AttachControls({ colors, disabled, onScreenshot, onAttach }: {
   onAttach: () => void
 }) {
   const cls = 'w-9 h-9 rounded-full flex items-center justify-center transition-colors'
+  // Filled and outlined so screenshot / attach stand out in the pill.
+  const prominent = { background: colors.tabActive, border: `1px solid ${colors.tabActiveBorder}`, color: colors.textPrimary }
   return (
     <div className="flex items-center gap-1">
       <button
@@ -516,8 +518,9 @@ function AttachControls({ colors, disabled, onScreenshot, onAttach }: {
         onClick={onScreenshot}
         disabled={disabled}
         className={cls}
-        style={{ background: colors.micBg, color: colors.micColor }}
+        style={prominent}
         title="Screenshot"
+        aria-label="Screenshot"
       >
         <Camera size={16} />
       </button>
@@ -526,8 +529,9 @@ function AttachControls({ colors, disabled, onScreenshot, onAttach }: {
         onClick={onAttach}
         disabled={disabled}
         className={cls}
-        style={{ background: colors.micBg, color: colors.micColor }}
+        style={prominent}
         title="Attach file"
+        aria-label="Attach file"
       >
         <Paperclip size={16} />
       </button>

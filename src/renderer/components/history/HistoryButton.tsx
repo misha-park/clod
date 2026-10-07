@@ -10,12 +10,12 @@ export function HistoryButton() {
   return (
     <button
       onClick={() => setHistoryOpen(!historyOpen)}
-      className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+      className="flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full transition-colors"
       style={{ color: historyOpen ? colors.accent : colors.textTertiary }}
       title="Past conversations (or type ? in the input bar)"
       aria-label="Past conversations"
     >
-      <Clock size={13} />
+      <Clock size={15} />
     </button>
   )
 }

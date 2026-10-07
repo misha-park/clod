@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { Terminal, CaretDown, Check, FolderOpen, Plus, X, ShieldCheck } from '@phosphor-icons/react'
+import { CaretDown, Check, FolderOpen, Plus, X, ShieldCheck } from '@phosphor-icons/react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useSessionStore, AVAILABLE_MODELS, getModelDisplayLabel } from '../stores/sessionStore'
 import { usePopoverLayer } from './PopoverLayer'
@@ -70,10 +70,13 @@ function ModelPicker() {
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        className="flex items-center gap-0.5 text-[10px] rounded-full px-1.5 py-0.5 transition-colors"
+        className="flex items-center gap-1 text-[12px] rounded-full transition-colors"
         style={{
-          color: colors.textTertiary,
+          color: colors.textSecondary,
           cursor: isBusy ? 'not-allowed' : 'pointer',
+          height: 28,
+          padding: '0 11px',
+          border: `1px solid ${colors.containerBorder}`,
         }}
         title={isBusy ? 'Stop the task to change model' : 'Switch model'}
       >
@@ -175,16 +178,19 @@ function PermissionModePicker() {
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        className="flex items-center gap-0.5 text-[10px] rounded-full px-1.5 py-0.5 transition-colors"
+        className="flex items-center gap-1 text-[12px] rounded-full transition-colors"
         style={{
-          color: isAuto ? '#f59e0b' : colors.textTertiary,
+          color: isAuto ? '#f59e0b' : colors.textSecondary,
           background: isAuto ? 'rgba(245,158,11,0.14)' : 'transparent',
           fontWeight: isAuto ? 600 : 400,
           cursor: 'pointer',
+          height: 28,
+          padding: '0 11px',
+          border: `1px solid ${isAuto ? 'rgba(245,158,11,0.35)' : colors.containerBorder}`,
         }}
         title={isAuto ? 'Auto-approve is ON — tools run without asking (click to change)' : 'Permission mode (global)'}
       >
-        <ShieldCheck size={11} weight={isAuto ? 'fill' : 'regular'} />
+        <ShieldCheck size={13} weight={isAuto ? 'fill' : 'regular'} />
         {isAuto ? 'Auto' : 'Ask'}
         <CaretDown size={10} style={{ opacity: 0.6 }} />
       </button>
@@ -300,10 +306,6 @@ export function StatusBar() {
   const isRunning = tab.status === 'running' || tab.status === 'connecting'
   const hasExtraDirs = tab.additionalDirs.length > 0
 
-  const handleOpenInTerminal = () => {
-    window.clod.openInTerminal(tab.claudeSessionId, tab.workingDirectory)
-  }
-
   const handleDirClick = () => {
     if (isRunning) return
     if (!dirOpen && dirRef.current) {
@@ -329,25 +331,28 @@ export function StatusBar() {
 
   return (
     <div
-      className="flex items-center justify-between px-4 py-1.5"
-      style={{ minHeight: 28 }}
+      className="flex items-center"
+      style={{ padding: '2px 14px 12px' }}
     >
       {/* Left — directory + model picker */}
-      <div className="flex items-center gap-2 text-[11px] min-w-0" style={{ color: colors.textTertiary }}>
+      <div className="flex items-center gap-1.5 text-[12px] min-w-0" style={{ color: colors.textSecondary }}>
         {/* Directory button */}
         <button
           ref={dirRef}
           onClick={handleDirClick}
-          className="flex items-center gap-1 rounded-full px-1.5 py-0.5 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 text-[12px] rounded-full transition-colors flex-shrink-0"
           style={{
-            color: colors.textTertiary,
+            color: colors.textSecondary,
             cursor: isRunning ? 'not-allowed' : 'pointer',
-            maxWidth: 140,
+            maxWidth: 160,
+            height: 28,
+            padding: '0 11px',
+            border: `1px solid ${colors.containerBorder}`,
           }}
           title={dirTooltip}
           disabled={isRunning}
         >
-          <FolderOpen size={11} className="flex-shrink-0" />
+          <FolderOpen size={13} className="flex-shrink-0" />
           <span className="truncate">{tab.hasChosenDirectory ? compactPath(tab.workingDirectory) : '—'}</span>
           {hasExtraDirs && (
             <span style={{ color: colors.textTertiary, fontWeight: 600 }}>+{tab.additionalDirs.length}</span>
@@ -430,27 +435,11 @@ export function StatusBar() {
           popoverLayer,
         )}
 
-        <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
-
         <ModelPicker />
-
-        <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
 
         <PermissionModePicker />
       </div>
 
-      {/* Right — Open in CLI */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <button
-          onClick={handleOpenInTerminal}
-          className="flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 transition-colors"
-          style={{ color: colors.textTertiary }}
-          title="Open this session in Terminal"
-        >
-          Open in CLI
-          <Terminal size={11} />
-        </button>
-      </div>
     </div>
   )
 }
