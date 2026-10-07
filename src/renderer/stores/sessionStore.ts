@@ -322,8 +322,9 @@ export const useSessionStore = create<State>((set, get) => ({
   activeTabId: initialTab.id,
   isExpanded: false,
   historyOpen: false,
+  // The side drawer is the default; the in-card view stays available from its header.
   historyMode: (() => {
-    try { return localStorage.getItem('clod-history-mode') === 'drawer' ? 'drawer' : 'card' } catch { return 'card' }
+    try { return localStorage.getItem('clod-history-layout') === 'card' ? 'card' : 'drawer' } catch { return 'drawer' }
   })() as 'card' | 'drawer',
   setHistoryOpen: (open) => {
     // The in-card view lives in the card body, so the card must be expanded.
@@ -331,7 +332,7 @@ export const useSessionStore = create<State>((set, get) => ({
     else set({ historyOpen: open })
   },
   setHistoryMode: (mode) => {
-    try { localStorage.setItem('clod-history-mode', mode) } catch {}
+    try { localStorage.setItem('clod-history-layout', mode) } catch {}
     set((s) => ({ historyMode: mode, isExpanded: mode === 'card' && s.historyOpen ? true : s.isExpanded }))
   },
   staticInfo: null,

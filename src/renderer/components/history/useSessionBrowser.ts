@@ -62,7 +62,8 @@ export function useSessionBrowser(active: boolean, initialQuery = '') {
   const resumeSession = useSessionStore((s) => s.resumeSession)
   const projectPath = useEffectiveProjectPath()
   const [query, setQuery] = useState(initialQuery)
-  const [allFolders, setAllFolders] = useState(false)
+  // Search every conversation by default; Tab / the scope button narrows to this folder.
+  const [allFolders, setAllFolders] = useState(true)
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [loading, setLoading] = useState(false)
   const seq = useRef(0)
