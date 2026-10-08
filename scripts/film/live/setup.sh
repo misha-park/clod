@@ -59,6 +59,13 @@ tell application "Finder"
 end tell
 OSA
 
+# On a fresh account, start Clod on the right so it sits beside the Finder window.
+SETTINGS="$HOME/Library/Application Support/Clod/settings.json"
+if [ ! -f "$SETTINGS" ]; then
+  mkdir -p "$(dirname "$SETTINGS")"
+  echo '{ "windowPosition": "right", "expandedUI": true, "hotkeyTipDone": true }' > "$SETTINGS"
+fi
+
 # Restart Clod in film mode (hidden until you double-tap Option).
 osascript -e 'quit app "Clod"' 2>/dev/null || true
 for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Clod >/dev/null || break; sleep 0.5; done
