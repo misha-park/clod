@@ -118,6 +118,15 @@ export class ControlPlane extends EventEmitter {
       this.emit('event', tabId, permEvent)
     })
 
+    // Claude asked for a folder (the request_folder tool): show the folder card.
+    this.permissionServer.on('folder-request', (questionId: string, tabId: string, request: { name: string; reason: string; matches: Array<{ path: string; name: string }> }) => {
+      if (!this.tabs.has(tabId)) {
+        this.permissionServer.respondToFolder(questionId, null)
+        return
+      }
+      this.emit('event', tabId, { type: 'folder_request', questionId, ...request } as NormalizedEvent)
+    })
+
     // ─── Wire RunManager events → ControlPlane routing ───
 
     this.runManager.on('normalized', (requestId: string, event: NormalizedEvent) => {
@@ -416,7 +425,8 @@ export class ControlPlane extends EventEmitter {
     if (!this.runManager.canReuse(tabId, options) && this.permissionServer.getPort()) {
       newToken = this.permissionServer.registerRun(tabId, requestId, options.sessionId || null)
       const hookSettingsPath = this.permissionServer.generateSettingsFile(newToken)
-      options = { ...options, hookSettingsPath }
+      const mcpConfigPath = this.permissionServer.generateMcpConfig(newToken)
+      options = { ...options, hookSettingsPath, mcpConfigPath }
     }
 
     tab.activeRequestId = requestId
@@ -482,6 +492,11 @@ export class ControlPlane extends EventEmitter {
   }
 
   // ─── Permission Response ───
+
+  /** The user's answer to a folder card: a path, or null for "not now". */
+  respondToFolder(questionId: string, path: string | null): boolean {
+    return this.permissionServer.respondToFolder(questionId, path)
+  }
 
   respondToPermission(tabId: string, questionId: string, optionId: string): boolean {
     // Route to hook server if this is a hook-based permission request.

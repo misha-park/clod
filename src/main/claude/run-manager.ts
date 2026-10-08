@@ -7,6 +7,7 @@ import { normalize } from './event-normalizer'
 import { buildUserContent } from './message-content'
 import { log as _log } from '../logger'
 import { getCliEnv, getClaudeEnv } from '../cli-env'
+import { FOLDER_TOOL_NAME } from '../hooks/folder-tool'
 import type { ClaudeEvent, RunOptions, EnrichedError } from '../../shared/types'
 
 const MAX_RING_LINES = 100
@@ -37,6 +38,11 @@ const CLOD_SYSTEM_HINT = [
   'You are still a software engineering assistant. Keep using your tools (Read, Edit, Bash, etc.)',
   'normally. But when presenting information, links, resources, or explanations to the user,',
   'take full advantage of the rich UI. The user expects a polished chat experience, not raw terminal text.',
+  '',
+  'Folders: when the user mentions a folder by name without its full path (for example "my tax folder"),',
+  'or you need to work in a folder outside your working folder, call the request_folder tool from the clod',
+  'MCP server with the folder name and a short reason. Clod finds matching folders and asks the user to pick',
+  'one, then returns its path. Do not search the disk for folders yourself with find or mdfind.',
 ].join('\n')
 
 // Tools auto-approved via --allowedTools (never trigger the permission card).
@@ -290,8 +296,11 @@ export class RunManager extends EventEmitter {
       // for dangerous tools (Bash, Edit, Write, MultiEdit).
       // Auto-approve safe tools so they don't trigger the permission card.
       args.push('--settings', options.hookSettingsPath)
+      // Clod's request_folder tool (it asks the user in its own card).
+      if (options.mcpConfigPath) args.push('--mcp-config', options.mcpConfigPath)
       const safeAllowed = [
         ...SAFE_TOOLS,
+        ...(options.mcpConfigPath ? [FOLDER_TOOL_NAME] : []),
         ...(options.allowedTools || []),
       ]
       args.push('--allowedTools', safeAllowed.join(','))

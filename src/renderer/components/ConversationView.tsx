@@ -16,6 +16,7 @@ import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { persistSettings } from '../settings-sync'
 import { HotkeyTip } from './HotkeyTip'
+import { FolderRequestCard } from './FolderRequestCard'
 import { useColors, useThemeStore } from '../theme'
 import { overlaySize } from '../../shared/layout'
 import type { Message } from '../../shared/types'
@@ -208,6 +209,8 @@ export function ConversationView() {
             />
           )}
         </AnimatePresence>
+
+        <FolderRequestCard tabId={tab.id} />
 
         {/* Permission denied fallback card */}
         <AnimatePresence>

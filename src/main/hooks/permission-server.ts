@@ -25,6 +25,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { log as _log } from '../logger'
+import { existingFolder, FOLDER_MCP_SCRIPT, FOLDER_TOOL_NAME, foldersFor, type FolderMatch } from './folder-tool'
 const PERMISSION_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 const DEFAULT_PORT = 19836
 const MAX_BODY_SIZE = 1024 * 1024 // 1MB
@@ -224,6 +225,7 @@ interface RunRegistration {
  *
  * Events:
  *  - 'permission-request' (questionId, toolRequest, tabId, options) — forward to renderer
+ *  - 'folder-request' (questionId, tabId, { name, reason, matches }) — Claude asked for a folder
  */
 export class PermissionServer extends EventEmitter {
   private server: ReturnType<typeof createServer> | null = null
@@ -242,6 +244,12 @@ export class PermissionServer extends EventEmitter {
 
   /** Tracked generated settings files: runToken → filePath */
   private settingsFiles = new Map<string, string>()
+
+  /** Folder requests waiting for the user: questionId → answer callback */
+  private pendingFolders = new Map<string, { runToken: string; timeout: ReturnType<typeof setTimeout>; resolve: (answer: { path: string | null; message?: string }) => void }>()
+
+  /** Tracked MCP config files for the folder tool: runToken → filePath */
+  private mcpConfigFiles = new Map<string, string>()
 
   constructor(port = DEFAULT_PORT) {
     super()
@@ -285,11 +293,18 @@ export class PermissionServer extends EventEmitter {
       this.pendingRequests.delete(qid)
     }
 
+    for (const [qid, pending] of this.pendingFolders) {
+      clearTimeout(pending.timeout)
+      pending.resolve({ path: null, message: 'Clod is closing.' })
+      this.pendingFolders.delete(qid)
+    }
+
     // Clean up all remaining settings files (best-effort)
-    for (const [, filePath] of this.settingsFiles) {
+    for (const [, filePath] of [...this.settingsFiles, ...this.mcpConfigFiles]) {
       try { unlinkSync(filePath) } catch {}
     }
     this.settingsFiles.clear()
+    this.mcpConfigFiles.clear()
 
     if (this.server) {
       this.server.close()
@@ -331,11 +346,21 @@ export class PermissionServer extends EventEmitter {
       }
     }
 
-    // Clean up settings file for this run
-    const filePath = this.settingsFiles.get(runToken)
-    if (filePath) {
-      try { unlinkSync(filePath) } catch {}
-      this.settingsFiles.delete(runToken)
+    for (const [qid, pending] of this.pendingFolders) {
+      if (pending.runToken === runToken) {
+        clearTimeout(pending.timeout)
+        pending.resolve({ path: null, message: 'The conversation ended.' })
+        this.pendingFolders.delete(qid)
+      }
+    }
+
+    // Clean up settings and MCP config files for this run
+    for (const files of [this.settingsFiles, this.mcpConfigFiles]) {
+      const filePath = files.get(runToken)
+      if (filePath) {
+        try { unlinkSync(filePath) } catch {}
+        files.delete(runToken)
+      }
     }
 
     this.runTokens.delete(runToken)
@@ -453,6 +478,82 @@ export class PermissionServer extends EventEmitter {
     return filePath
   }
 
+  // ─── Folder tool ───
+
+  /**
+   * Write the MCP config that gives this run Clod's request_folder tool. The
+   * tool's server runs on Clod's own binary in Node mode and talks back to
+   * this server at a private, per-run address.
+   */
+  generateMcpConfig(runToken: string): string {
+    const port = this._actualPort || this.port
+    const dir = join(tmpdir(), 'clod-hook-config')
+    try { mkdirSync(dir, { recursive: true, mode: 0o700 }) } catch {}
+    const scriptPath = join(dir, 'clod-folder-tool.cjs')
+    writeFileSync(scriptPath, FOLDER_MCP_SCRIPT, { mode: 0o600 })
+    const config = {
+      mcpServers: {
+        clod: {
+          type: 'stdio',
+          command: process.execPath,
+          args: [scriptPath],
+          env: {
+            ELECTRON_RUN_AS_NODE: '1',
+            CLOD_FOLDER_URL: `http://127.0.0.1:${port}/folder/request/${this.appSecret}/${runToken}`,
+          },
+        },
+      },
+    }
+    const filePath = join(dir, `clod-mcp-${runToken}.json`)
+    writeFileSync(filePath, JSON.stringify(config, null, 2), { mode: 0o600 })
+    this.mcpConfigFiles.set(runToken, filePath)
+    return filePath
+  }
+
+  /** The user's answer to a folder request: a folder path, or null for "not now". */
+  respondToFolder(questionId: string, path: string | null): boolean {
+    const pending = this.pendingFolders.get(questionId)
+    if (!pending) return false
+    clearTimeout(pending.timeout)
+    this.pendingFolders.delete(questionId)
+    const folder = path ? existingFolder(path) : null
+    log(`Folder request ${questionId.substring(0, 14)}… → ${folder ? 'allowed' : 'declined'}`)
+    pending.resolve(folder
+      ? { path: folder, message: 'It has been added to this conversation.' }
+      : { path: null, message: 'The user chose not to share a folder. Ask them which folder they meant, or carry on without it.' })
+    return true
+  }
+
+  private async _handleFolderRequest(segments: string[], req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const reply = (status: number, body: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
+    const registration = segments[2] === this.appSecret ? this.runTokens.get(segments[3]) : undefined
+    if (!registration) return reply(403, { path: null, message: 'Not allowed.' })
+
+    let body = ''
+    for await (const chunk of req) {
+      body += chunk
+      if (body.length > 64 * 1024) return reply(413, { path: null, message: 'Request too large.' })
+    }
+    let request: { name?: unknown; path?: unknown; reason?: unknown }
+    try { request = JSON.parse(body || '{}') } catch { return reply(400, { path: null, message: 'Invalid request.' }) }
+    const name = typeof request.name === 'string' ? request.name.slice(0, 200) : undefined
+    const path = typeof request.path === 'string' ? request.path.slice(0, 1000) : undefined
+    const reason = typeof request.reason === 'string' ? request.reason.slice(0, 300) : ''
+
+    const matches: FolderMatch[] = await foldersFor({ name, path })
+    const questionId = `folder-${randomUUID()}`
+    log(`Folder request ${questionId.substring(0, 14)}…: "${name ?? path ?? ''}" → ${matches.length} match(es)`)
+    const answer = await new Promise<{ path: string | null; message?: string }>((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingFolders.delete(questionId)
+        resolve({ path: null, message: 'The user did not answer.' })
+      }, PERMISSION_TIMEOUT_MS)
+      this.pendingFolders.set(questionId, { runToken: segments[3], timeout, resolve })
+      this.emit('folder-request', questionId, registration.tabId, { name: name ?? (path ? path.split('/').pop() : ''), reason, matches })
+    })
+    reply(200, answer)
+  }
+
   // ─── HTTP Request Handling ───
 
   private async _handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -464,7 +565,11 @@ export class PermissionServer extends EventEmitter {
     }
 
     // Parse URL: /hook/pre-tool-use/<appSecret>/<runToken>
+    //        or: /folder/request/<appSecret>/<runToken> (the folder tool)
     const segments = (req.url || '').split('/').filter(Boolean)
+    if (segments.length === 4 && segments[0] === 'folder' && segments[1] === 'request') {
+      return this._handleFolderRequest(segments, req, res)
+    }
     if (segments.length !== 4 || segments[0] !== 'hook' || segments[1] !== 'pre-tool-use') {
       res.writeHead(404, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(denyResponse('Invalid path')))
@@ -541,6 +646,13 @@ export class PermissionServer extends EventEmitter {
     // Check scoped allows
     const sessionId = toolRequest.session_id
     const toolName = toolRequest.tool_name
+
+    // The folder tool asks the user itself (its own card), so let it through.
+    if (toolName === FOLDER_TOOL_NAME) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(allowResponse('Clod asks the user in its folder card')))
+      return
+    }
 
     // Check session-scoped allow
     if (this.scopedAllows.has(`session:${sessionId}:tool:${toolName}`)) {

@@ -700,6 +700,11 @@ ipcMain.on(IPC.SET_PERMISSION_MODE, (_event, mode: string) => {
   controlPlane.setPermissionMode(mode)
 })
 
+ipcMain.handle(IPC.RESPOND_FOLDER, (_event, { questionId, path }: { questionId: string; path: string | null }) => {
+  log(`IPC RESPOND_FOLDER: question=${questionId} ${path ? 'allowed' : 'declined'}`)
+  return controlPlane.respondToFolder(String(questionId), typeof path === 'string' ? path : null)
+})
+
 ipcMain.handle(IPC.RESPOND_PERMISSION, (_event, { tabId, questionId, optionId }: { tabId: string; questionId: string; optionId: string }) => {
   log(`IPC RESPOND_PERMISSION: tab=${tabId} question=${questionId} option=${optionId}`)
   return controlPlane.respondToPermission(tabId, questionId, optionId)

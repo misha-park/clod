@@ -172,6 +172,8 @@ export interface TabState {
   hasChosenDirectory: boolean
   /** Extra directories accessible via --add-dir (session-preserving) */
   additionalDirs: string[]
+  /** Claude is asking for a folder (the request_folder tool) */
+  folderRequest?: { questionId: string; name: string; reason: string; matches: Array<{ path: string; name: string }> } | null
 }
 
 export interface Message {
@@ -212,6 +214,7 @@ export type NormalizedEvent =
   | { type: 'session_dead'; exitCode: number | null; signal: string | null; stderrTail: string[] }
   | { type: 'rate_limit'; status: string; resetsAt?: number; rateLimitType?: string }
   | { type: 'usage'; usage: UsageData }
+  | { type: 'folder_request'; questionId: string; name: string; reason: string; matches: Array<{ path: string; name: string }> }
   | { type: 'permission_request'; questionId: string; toolName: string; toolDescription?: string; toolInput?: Record<string, unknown>; options: Array<{ id: string; label: string; kind?: string }> }
 
 // ─── Run Options ───
@@ -242,6 +245,8 @@ export interface RunOptions {
   model?: string
   /** Path to CLOD-scoped settings file with hook config (passed via --settings) */
   hookSettingsPath?: string
+  /** Path to the MCP config that gives the run Clod's request_folder tool (--mcp-config) */
+  mcpConfigPath?: string
   /** Extra directories to add via --add-dir (session-preserving) */
   addDirs?: string[]
   /** Permission mode for this run: 'auto' bypasses all approvals at the CLI level. */
@@ -345,6 +350,7 @@ export const IPC = {
   TAKE_SCREENSHOT: 'clod:take-screenshot',
   PASTE_IMAGE: 'clod:paste-image',
   RESPOND_PERMISSION: 'clod:respond-permission',
+  RESPOND_FOLDER: 'clod:respond-folder',
   RESET_TAB_SESSION: 'clod:reset-tab-session',
   LIST_SESSIONS: 'clod:list-sessions',
   LOAD_SESSION: 'clod:load-session',

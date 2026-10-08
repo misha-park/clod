@@ -215,6 +215,8 @@ interface State {
   runShellCommand: (command: string) => Promise<void>
   sendMessage: (prompt: string, projectPath?: string) => void
   respondPermission: (tabId: string, questionId: string, optionId: string) => void
+  /** Answer a folder card; an allowed folder is added to the conversation */
+  respondFolder: (tabId: string, path: string | null) => void
   addDirectory: (dir: string) => void
   removeDirectory: (dir: string) => void
   setBaseDirectory: (dir: string) => void
@@ -681,6 +683,20 @@ export const useSessionStore = create<State>((set, get) => ({
 
   // ─── Permission response ───
 
+  respondFolder: (tabId, path) => {
+    const tab = get().tabs.find((t) => t.id === tabId)
+    const request = tab?.folderRequest
+    if (!tab || !request) return
+    window.clod.respondFolder(request.questionId, path).catch(() => {})
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId) return t
+        const add = path && path !== t.workingDirectory && !t.additionalDirs.includes(path)
+        return { ...t, folderRequest: null, currentActivity: 'Working...', additionalDirs: add ? [...t.additionalDirs, path] : t.additionalDirs }
+      }),
+    }))
+  },
+
   respondPermission: (tabId, questionId, optionId) => {
     // Send to backend
     window.clod.respondPermission(tabId, questionId, optionId).catch(() => {})
@@ -1074,6 +1090,7 @@ export const useSessionStore = create<State>((set, get) => ({
             updated.activeRequestId = null
             updated.currentActivity = ''
             updated.permissionQueue = []
+            updated.folderRequest = null
             updated.lastResult = {
               totalCostUsd: event.costUsd,
               durationMs: event.durationMs,
@@ -1122,6 +1139,7 @@ export const useSessionStore = create<State>((set, get) => ({
             updated.activeRequestId = null
             updated.currentActivity = ''
             updated.permissionQueue = []
+            updated.folderRequest = null
             updated.permissionDenied = null
             updated.messages = [
               ...updated.messages,
@@ -1135,6 +1153,7 @@ export const useSessionStore = create<State>((set, get) => ({
             updated.activeRequestId = null
             updated.currentActivity = ''
             updated.permissionQueue = []
+            updated.folderRequest = null
             updated.permissionDenied = null
             updated.messages = [
               ...updated.messages,
@@ -1145,6 +1164,11 @@ export const useSessionStore = create<State>((set, get) => ({
                 timestamp: Date.now(),
               },
             ]
+            break
+
+          case 'folder_request':
+            updated.folderRequest = { questionId: event.questionId, name: event.name, reason: event.reason, matches: event.matches }
+            updated.currentActivity = 'Waiting for you to choose a folder'
             break
 
           case 'permission_request': {
