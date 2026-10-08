@@ -176,6 +176,7 @@ struct UpdateBanner: View {
 
 /// Settings → Help: version, licence, debug info for bug reports, uninstalling.
 struct HelpSection: View {
+    @EnvironmentObject var model: SettingsModel
     @State private var copied = false
     @State private var confirmUninstall = false
     @State private var error: String?
@@ -188,6 +189,7 @@ struct HelpSection: View {
                 RowLabel("Version", symbol: "info.circle.fill", color: .gray)
             }
             LabeledContent {
+                HStack {
                 Button(copied ? "Copied" : "Copy debug info") {
                     Task {
                         do {
@@ -201,10 +203,27 @@ struct HelpSection: View {
                         }
                     }
                 }
+                Button("Report…") {
+                    Task {
+                        do { try await ClodControl.send("reportProblem"); error = nil }
+                        catch { self.error = error.localizedDescription }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                }
             } label: {
                 VStack(alignment: .leading, spacing: 1) {
                     RowLabel("Report a problem", symbol: "ladybug.fill", color: .red)
-                    Text("Copies versions, setup status and the recent log. Read it before sharing: the log can mention folder and file names.")
+                    Text("Opens a report on GitHub, or a short form if you don't have a GitHub account, with your versions, setup and recent log. You see it before it's sent: the log can mention folder and file names.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.leading, 32)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Toggle(isOn: Binding(get: { model.reportPrompts }, set: { model.set("reportPrompts", $0) })) {
+                VStack(alignment: .leading, spacing: 1) {
+                    RowLabel("Offer to report problems", symbol: "exclamationmark.bubble.fill", color: .orange)
+                    Text("When something goes wrong, Clod asks whether you'd like to send a report. Nothing is sent unless you choose to.")
                         .font(.caption).foregroundStyle(.secondary)
                         .padding(.leading, 32)
                         .fixedSize(horizontal: false, vertical: true)

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Report a problem · Clod</title>
+<style>
+:root{--bg:#f6f3ee;--surface:#fff;--ink:#2b2a27;--muted:#6f6b62;--line:#e6e0d6;--accent:#C15F3C;--accent-hi:#D97757;--ok:#2f7d4f;--bad:#b4462b}
+@media (prefers-color-scheme: dark){:root{--bg:#1a1a18;--surface:#232321;--ink:#ece9e1;--muted:#a8a59c;--line:#33332f;--ok:#6fbf8a;--bad:#e58a6f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.wrap{max-width:680px;margin:0 auto;padding:28px 20px 60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--ink);text-decoration:none;margin-bottom:26px}
+.brand img{width:28px;height:28px;border-radius:7px}
+h1{font-size:30px;letter-spacing:-0.01em;margin:0 0 8px}
+.lede{color:var(--muted);margin:0 0 24px}
+label{display:block;font-weight:600;font-size:14.5px;margin:18px 0 6px}
+.hint{font-weight:400;color:var(--muted)}
+textarea,input{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+textarea{min-height:120px;resize:vertical}
+textarea.mono{font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;min-height:220px}
+textarea:focus,input:focus{outline:2px solid var(--accent-hi);outline-offset:1px}
+.trap{position:absolute;left:-5000px}
+button{margin-top:22px;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:12px 24px;font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+.status{margin-top:16px;font-size:15px}
+.status.ok{color:var(--ok)}.status.bad{color:var(--bad)}
+.note{margin-top:30px;font-size:13.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="brand" href="./"><img src="icon.png" alt="">Clod</a>
+  <h1>Report a problem</h1>
+  <p class="lede">Tell us what went wrong and it goes straight to Clod's developer. No account needed.</p>
+
+  <form id="form">
+    <label for="what">What happened? <span class="hint">What were you doing when it went wrong?</span></label>
+    <textarea id="what" name="what" required></textarea>
+
+    <label for="email">Your email <span class="hint">(optional, only if you'd like a reply)</span></label>
+    <input id="email" name="email" type="email" autocomplete="email">
+
+    <label for="details">Details from Clod <span class="hint">(edit out anything you'd rather not send)</span></label>
+    <textarea id="details" name="details" class="mono" spellcheck="false" placeholder="Open this page from Clod (Settings → Help → Report…) to fill this in, or paste the details from your clipboard."></textarea>
+
+    <input class="trap" type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button type="submit" id="send">Send report</button>
+    <div class="status" id="status" role="status"></div>
+  </form>
+
+  <p class="note">Your report is sent through Formspree and arrives by email. It's only used to fix problems in Clod. Prefer GitHub? <a href="https://github.com/misha-park/clod/issues/new">Open an issue there</a> instead.</p>
+</div>
+<script>
+// The Formspree form ID (the part after /f/ in its endpoint). Empty = not set up yet.
+const FORMSPREE_FORM_ID = ''
+
+const form = document.getElementById('form'), send = document.getElementById('send'), status = document.getElementById('status')
+let summary = '', version = ''
+
+// Clod passes the details after '#', which browsers never send to a server.
+// Read them, then drop them from the address so they don't stay in history.
+try {
+  if (location.hash.length > 1) {
+    const data = JSON.parse(decodeURIComponent(location.hash.slice(1)))
+    summary = data.summary || ''
+    version = data.version || ''
+    document.getElementById('details').value = data.details || ''
+    history.replaceState(null, '', location.pathname)
+  }
+} catch {}
+
+const say = (text, kind) => { status.textContent = text; status.className = 'status ' + (kind || '') }
+
+if (!FORMSPREE_FORM_ID) {
+  send.disabled = true
+  say('This form isn’t set up yet. Please report the problem on GitHub instead.', 'bad')
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault()
+  if (!FORMSPREE_FORM_ID) return
+  send.disabled = true
+  say('Sending…')
+  const fields = Object.fromEntries(new FormData(form))
+  try {
+    const res = await fetch('https://formspree.io/f/' + FORMSPREE_FORM_ID, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        _subject: 'Clod problem' + (summary ? ': ' + summary.slice(0, 80) : ''),
+        ...fields,
+        summary,
+        version,
+      }),
+    })
+    if (!res.ok) throw new Error()
+    form.reset()
+    say('Thanks, your report has been sent.', 'ok')
+  } catch {
+    send.disabled = false
+    say('That didn’t send. Check your connection and try again, or report it on GitHub.', 'bad')
+  }
+})
+</script>
+</body>
+</html>

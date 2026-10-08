@@ -45,6 +45,11 @@ const RULES: Array<{ test: RegExp; text: string; action: ErrorAction | null }> =
   },
 ]
 
+/** Errors that point at a bug in Clod itself (rather than Claude, the network or the account). */
+export function looksLikeClodBug(raw: string): boolean {
+  return /Error invoking remote method|does not exist|is not a function|Cannot read propert|undefined is not|is not defined|Maximum call stack/i.test(raw)
+}
+
 /** A friendlier message for a known problem, or null to show the raw error. */
 export function explainError(raw: string): ExplainedError | null {
   for (const rule of RULES) {

@@ -20,6 +20,7 @@ import { clearCredential, CredentialKind, getStoredCredential, storeCredential }
 import { getSettings, publishState } from './settings-file'
 import { log as _log, LOG_FILE, readLogTail } from './logger'
 import { downloadUpdate } from './updates'
+import { buildReport, reportProblem } from './report'
 
 function log(msg: string): void {
   _log('setup', msg)
@@ -322,23 +323,23 @@ function openPrivacyPane(name: Permission): void {
 const DEBUG_SETTING_KEYS = ['themeMode', 'expandedUI', 'windowPosition', 'hotkeyMode', 'permissionMode',
   'preferredModel', 'historyLayout', 'thinkingAnimation', 'openAtLogin', 'setupCompleted']
 
-/** Copy a summary for bug reports: versions, setup status, settings and the recent log. */
-function copyDebugInfo(): void {
+/** Versions, setup status and non-private settings, for bug reports. */
+export function describeSetup(): string {
   const settings = getSettings()
   const p = state.permissions
-  const lines = [
+  return [
     `Clod ${app.getVersion()} · macOS ${process.getSystemVersion()} · ${process.arch}`,
     `Claude Code: ${state.cli.installed ? state.cli.version : 'not installed'}`,
     `Signed in: ${state.auth.loggedIn ? `yes (${state.auth.method ?? '?'}${state.auth.subscription ? `, ${state.auth.subscription}` : ''})` : 'no'}` +
       (state.credential ? ` · pasted ${state.credential}` : ''),
     `Permissions: accessibility ${p.accessibility ? 'allowed' : 'not allowed'} · screen ${p.screen} · terminal ${p.automation}`,
     `Settings: ${DEBUG_SETTING_KEYS.map((k) => `${k}=${JSON.stringify(settings[k])}`).join(' ')}`,
-    '',
-    '--- Recent log ---',
-    // Strip the email address if it appears; keep the rest as written.
-    readLogTail(40 * 1024).replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '<email>'),
-  ]
-  clipboard.writeText(lines.join('\n'))
+  ].join('\n')
+}
+
+/** Copy the full bug report (setup, recent problems and the log). */
+function copyDebugInfo(): void {
+  clipboard.writeText(buildReport())
   log('Copied debug info')
 }
 
@@ -396,6 +397,7 @@ async function handle(msg: Record<string, any>): Promise<void> {
       return openPrivacyPane(msg.name)
     case 'copyDebugInfo': return copyDebugInfo()
     case 'downloadUpdate': return downloadUpdate()
+    case 'reportProblem': return reportProblem()
     case 'uninstall':
       // Reply first; the app is gone a moment later.
       setTimeout(uninstall, 300)

@@ -39,6 +39,12 @@ export interface ClodAPI {
   onHotkeyUsed(callback: () => void): () => void
   /** ⌘T ('new') and ⌘W ('close'), caught by the main process */
   onTabShortcut(callback: (action: 'new' | 'close') => void): () => void
+  /** Clod noticed a problem and offers to report it */
+  onProblemDetected(callback: (summary: string) => void): () => void
+  /** Open the "Report a problem" choice (GitHub or email) */
+  reportProblem(summary?: string): void
+  /** Tell the main process about an error in the overlay; prompt = offer a report */
+  rendererProblem(summary: string, prompt: boolean): void
   /** The explain-selection shortcut fired: the selected text, or null and why */
   onExplainSelection(callback: (text: string | null, reason: 'accessibility' | 'empty' | null) => void): () => void
 
@@ -117,6 +123,13 @@ const api: ClodAPI = {
     ipcRenderer.on(IPC.EXPLAIN_SELECTION, handler)
     return () => ipcRenderer.removeListener(IPC.EXPLAIN_SELECTION, handler)
   },
+  onProblemDetected: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, summary: string) => callback(summary)
+    ipcRenderer.on(IPC.PROBLEM_DETECTED, handler)
+    return () => ipcRenderer.removeListener(IPC.PROBLEM_DETECTED, handler)
+  },
+  reportProblem: (summary) => ipcRenderer.send(IPC.REPORT_PROBLEM, summary),
+  rendererProblem: (summary, prompt) => ipcRenderer.send(IPC.RENDERER_PROBLEM, summary, prompt),
   onTabShortcut: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, action: 'new' | 'close') => callback(action)
     ipcRenderer.on(IPC.TAB_SHORTCUT, handler)

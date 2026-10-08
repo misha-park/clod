@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
 import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { useThemeStore } from '../theme'
-import { explainError } from '../../shared/errors'
+import { explainError, looksLikeClodBug } from '../../shared/errors'
 import { describeRateLimit } from '../../shared/limits'
 import notificationSrc from '../../../resources/notification.mp3'
 
@@ -209,6 +209,8 @@ interface State {
   /** Reopen tabs saved from the last launch. Returns true if any were restored. */
   restoreOpenTabs: () => Promise<boolean>
   addSystemMessage: (content: string) => void
+  /** A note offering to report a problem Clod noticed */
+  addReportPrompt: (summary: string) => void
   /** Run a `!` command in the tab's folder; its output joins the next message to Claude. */
   runShellCommand: (command: string) => Promise<void>
   sendMessage: (prompt: string, projectPath?: string) => void
@@ -330,6 +332,10 @@ const savedTabsAtLaunch = loadSavedTabs()
 function errorMessage(message: string, stderrTail: string[] = []): Message {
   const raw = `${message}${stderrTail.length > 0 ? '\n\n' + stderrTail.slice(-5).join('\n') : ''}`
   const explained = explainError(raw)
+  // Something that looks like a bug in Clod: offer to report it.
+  if (!explained && looksLikeClodBug(raw)) {
+    try { window.clod.rendererProblem(message.slice(0, 200), true) } catch {}
+  }
   return {
     id: nextMsgId(),
     role: 'system',
@@ -638,6 +644,22 @@ export const useSessionStore = create<State>((set, get) => ({
       }))
       return tab.id
     }
+  },
+
+  addReportPrompt: (summary) => {
+    const { activeTabId } = get()
+    const message: Message = {
+      id: nextMsgId(),
+      role: 'system',
+      content: `Something went wrong in Clod (${summary}). Sending a report helps get it fixed.`,
+      timestamp: Date.now(),
+      action: 'report',
+      detail: summary,
+    }
+    set((s) => ({
+      isExpanded: true,
+      tabs: s.tabs.map((t) => (t.id === activeTabId ? { ...t, messages: [...t.messages, message] } : t)),
+    }))
   },
 
   addSystemMessage: (content) => {
@@ -1108,6 +1130,7 @@ export const useSessionStore = create<State>((set, get) => ({
             break
 
           case 'session_dead':
+            try { window.clod.rendererProblem(`Claude Code stopped unexpectedly (exit ${event.exitCode})`, true) } catch {}
             updated.status = 'dead'
             updated.activeRequestId = null
             updated.currentActivity = ''

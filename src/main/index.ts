@@ -6,11 +6,13 @@ import { homedir } from 'os'
 import { ControlPlane } from './claude/control-plane'
 import { ensureSkills, type SkillStatus } from './skills/installer'
 import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './marketplace/catalog'
-import { log as _log, flushLogs } from './logger'
+import { log as _log, flushLogs, readLogTail } from './logger'
 import { getCliEnv, getClaudeEnv } from './cli-env'
 import { isSetUp, refreshPermissionState, startSetupServer, stopSetupServer } from './setup'
 import { downloadUpdate, startUpdateChecks, type AvailableUpdate } from './updates'
 import { DEFAULT_EXPLAIN_SHORTCUT, registerExplainShortcut } from './explain-selection'
+import { configureReports, noteProblem, problemDetected, reportProblem } from './report'
+import { describeSetup } from './setup'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
@@ -143,6 +145,25 @@ function scheduleToggleSnapshots(toggleId: number, phase: 'show' | 'hide'): void
 }
 
 
+// ─── Problem reports ───
+
+configureReports({
+  describeSetup,
+  readLog: () => readLogTail(40 * 1024),
+  // Ask in the overlay: a note in the conversation with a "Report problem" button.
+  onPrompt: (summary) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.PROBLEM_DETECTED, summary)
+  },
+})
+process.on('uncaughtException', (err) => problemDetected(`Clod error: ${err.message}`))
+process.on('unhandledRejection', (reason) => noteProblem(`Unhandled: ${reason instanceof Error ? reason.message : String(reason)}`))
+ipcMain.on(IPC.REPORT_PROBLEM, (_e, summary?: string) => { reportProblem(typeof summary === 'string' ? summary : undefined).catch(() => {}) })
+ipcMain.on(IPC.RENDERER_PROBLEM, (_e, summary: string, prompt: boolean) => {
+  const text = String(summary).slice(0, 300)
+  if (prompt) problemDetected(text)
+  else noteProblem(text)
+})
+
 // ─── Wire ControlPlane events → renderer ───
 
 controlPlane.on('event', (tabId: string, event: NormalizedEvent) => {
@@ -225,6 +246,17 @@ function createWindow(): void {
     if (key !== 't' && key !== 'w') return
     event.preventDefault()
     mainWindow?.webContents.send(IPC.TAB_SHORTCUT, key === 't' ? 'new' : 'close')
+  })
+
+  // If the overlay's process crashes, bring it back and offer to report it.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return
+    noteProblem(`Overlay crashed (${details.reason})`)
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.webContents.reload()
+      mainWindow.webContents.once('did-finish-load', () => setTimeout(() => problemDetected(`The Clod window crashed (${details.reason})`), 1500))
+    }, 500)
   })
 
   mainWindow.webContents.on('will-navigate', (event) => {

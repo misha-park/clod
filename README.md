@@ -50,14 +50,14 @@ Open Settings → **Help → Uninstall Clod…**. This removes Clod, its setting
 - Clod has no tracking or analytics. The only thing it contacts by itself is GitHub, once a day, to check for updates.
 - Your messages go to Anthropic through Claude Code, exactly as when you use Claude Code in Terminal.
 - A pasted token or API key is stored encrypted with your Mac's Keychain and only given to Claude Code.
-- Clod keeps a log on your Mac (`~/.clod-debug.log`) to help fix problems. Nothing is sent unless you copy it yourself (Settings → Help → Copy debug info).
+- Clod keeps a log on your Mac (`~/.clod-debug.log`) to help fix problems. When something goes wrong, Clod may offer to send a report; nothing is sent unless you choose to and press Send. You can turn the offers off in Settings → Help.
 
 ## Troubleshooting
 
 - **Double-tapping ⌥ Option does nothing:** check Settings → Permissions → Accessibility. If it says Allowed but still doesn't work, remove Clod from the Accessibility list in System Settings, add it again, then quit and reopen Clod.
 - **"Clod isn't signed in to Claude":** click **Sign in** under the message, or go to Settings → Account.
 - **Sign-in in the browser doesn't finish:** in setup or Settings → Account, choose **Sign in using Terminal**.
-- **Anything else:** Settings → Help → **Copy debug info**, and include it when you report the problem in [Issues](https://github.com/misha-park/clod/issues).
+- **Anything else:** Settings → Help → **Report…** opens a report on GitHub, or a short form if you don't have a GitHub account, with the details filled in.
 
 More in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 

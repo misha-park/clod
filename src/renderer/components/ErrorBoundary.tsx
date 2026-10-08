@@ -22,6 +22,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // Surface to the devtools console; main-process logs capture the rest.
     console.error('[clod] render error:', error, info.componentStack)
+    try { window.clod.rendererProblem(`Display error: ${error.message}`, true) } catch {}
   }
 
   private handleReload = (): void => {

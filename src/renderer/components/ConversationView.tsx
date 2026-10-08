@@ -14,6 +14,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
+import { persistSettings } from '../settings-sync'
 import { HotkeyTip } from './HotkeyTip'
 import { useColors, useThemeStore } from '../theme'
 import { overlaySize } from '../../shared/layout'
@@ -938,14 +939,26 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
       }}
     >
       {message.content}
-      {message.action && (
+      {(message.action === 'setup' || message.action === 'account') && (
         <button
-          onClick={() => window.clod.openSetup(message.action!)}
+          onClick={() => window.clod.openSetup(message.action as 'setup' | 'account')}
           className="block mt-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium"
           style={{ background: colors.accent, color: '#fff' }}
         >
           {message.action === 'setup' ? 'Open setup' : 'Sign in'}
         </button>
+      )}
+      {message.action === 'report' && (
+        <span className="flex items-center gap-3 mt-1.5">
+          <button
+            onClick={() => window.clod.reportProblem(message.detail)}
+            className="px-2.5 py-0.5 rounded-full text-[11px] font-medium"
+            style={{ background: colors.accent, color: '#fff' }}
+          >
+            Report problem…
+          </button>
+          <DontOfferAgain />
+        </span>
       )}
     </div>
   )
@@ -961,6 +974,22 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
     >
       {inner}
     </motion.div>
+  )
+}
+
+/** Turns off Clod's offers to report problems (Settings → Help still has the button). */
+function DontOfferAgain() {
+  const colors = useColors()
+  const [done, setDone] = useState(false)
+  if (done) return <span className="text-[11px]" style={{ color: colors.textTertiary }}>Won't offer again. Report from Settings → Help any time.</span>
+  return (
+    <button
+      onClick={() => { persistSettings({ reportPrompts: false }); setDone(true) }}
+      className="text-[11px] underline"
+      style={{ color: colors.textTertiary }}
+    >
+      Don't offer again
+    </button>
   )
 }
 

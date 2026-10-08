@@ -2,6 +2,13 @@ import { useEffect } from 'react'
 import { useSessionStore } from '../stores/sessionStore'
 import { explainPrompt } from '../../shared/explain'
 
+/** Shows Clod's offer to report a problem it noticed. */
+export function useProblemPrompts(): void {
+  useEffect(() => window.clod.onProblemDetected((summary) => {
+    useSessionStore.getState().addReportPrompt(summary)
+  }), [])
+}
+
 /**
  * Handles the "explain selection" shortcut: sends the selected text to Claude
  * in a fresh tab (or the current one, if it's empty and idle).

@@ -46,6 +46,8 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var showSetup = false
     /// Set once the user has picked (or accepted) Claude's starting folder in setup.
     @Published private(set) var folderChosen = false
+    /// Whether Clod offers to report problems it notices
+    @Published private(set) var reportPrompts = true
 
     // State published by Clod
     @Published private(set) var accessibilityGranted: Bool?
@@ -140,6 +142,7 @@ final class SettingsModel: ObservableObject {
         historyLayout = (d["historyLayout"] as? String) == "card" ? "card" : "drawer"
         showSetup = d["showSetup"] as? Bool ?? false
         folderChosen = d["folderChosen"] as? Bool ?? false
+        reportPrompts = d["reportPrompts"] as? Bool ?? true
     }
 
     private func reloadState() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { explainError } from './errors'
+import { explainError, looksLikeClodBug } from './errors'
 
 describe('explainError', () => {
   it('spots a missing Claude Code', () => {
@@ -27,5 +27,15 @@ describe('explainError', () => {
   it('leaves other errors alone', () => {
     expect(explainError('Run failed with exit code 1')).toBeNull()
     expect(explainError('Error: ENOENT: no such file or directory, open notes.txt')).toBeNull()
+  })
+})
+
+describe('looksLikeClodBug', () => {
+  it('flags errors from inside Clod', () => {
+    expect(looksLikeClodBug("Error invoking remote method 'clod:prompt': Error: Tab 44e6 does not exist")).toBe(true)
+    expect(looksLikeClodBug("Cannot read properties of undefined (reading 'id')")).toBe(true)
+  })
+  it('ignores ordinary failures', () => {
+    expect(looksLikeClodBug('Run failed with exit code 1')).toBe(false)
   })
 })

@@ -74,7 +74,7 @@ struct GuideTopic: Identifiable {
             "Your messages go to Anthropic through Claude Code, the same as using Claude Code in Terminal.",
             "Claude only sees files and folders you give it, and in **Ask** mode it asks before changing anything.",
             "A pasted token or API key is stored encrypted with your Mac's Keychain and only passed to Claude Code.",
-            "Clod keeps a log on your Mac (`~/.clod-debug.log`) for fixing problems. It stays on your Mac unless you copy it.",
+            "Clod keeps a log on your Mac (`~/.clod-debug.log`) for fixing problems. It's only sent if you choose to send a report, and you see it first.",
         ]),
         GuideTopic(title: "Buttons at the top", symbol: "square.on.square", color: .indigo, tips: [
             "**Copy** copies the whole conversation. Each code block and reply also has its own copy button.",

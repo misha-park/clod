@@ -184,8 +184,10 @@ export interface Message {
   timestamp: number
   /** Output of a `!` shell command, rendered as a monospaced block */
   shell?: boolean
-  /** A friendly error's button: open setup, or Settings → Account */
-  action?: 'setup' | 'account'
+  /** A button under a notice: open setup, Settings → Account, or report a problem */
+  action?: 'setup' | 'account' | 'report'
+  /** For 'report': a one-line summary of what went wrong */
+  detail?: string
 }
 
 export interface RunResult {
@@ -388,6 +390,9 @@ export const IPC = {
   HOTKEY_USED: 'clod:hotkey-used',
   TAB_SHORTCUT: 'clod:tab-shortcut',
   EXPLAIN_SELECTION: 'clod:explain-selection',
+  PROBLEM_DETECTED: 'clod:problem-detected',
+  REPORT_PROBLEM: 'clod:report-problem',
+  RENDERER_PROBLEM: 'clod:renderer-problem',
 
   // Theme
   GET_THEME: 'clod:get-theme',
