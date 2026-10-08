@@ -4,17 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Report a problem · Clod</title>
+<title>Report a problem — Clod</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f6f3ee;--surface:#fff;--ink:#2b2a27;--muted:#6f6b62;--line:#e6e0d6;--accent:#C15F3C;--accent-hi:#D97757;--ok:#2f7d4f;--bad:#b4462b}
-@media (prefers-color-scheme: dark){:root{--bg:#1a1a18;--surface:#232321;--ink:#ece9e1;--muted:#a8a59c;--line:#33332f;--ok:#6fbf8a;--bad:#e58a6f}}
+:root{--bg:#f4f1ea;--surface:#fbf9f5;--ink:#1f1e1b;--muted:#5f5b52;--line:#ddd7cb;--accent:#b95b38;--accent-hi:#D97757;--ok:#2f7d4f;--bad:#b4462b}
+@media (prefers-color-scheme: dark){:root{--bg:#171614;--surface:#1f1e1b;--ink:#ece8df;--muted:#aaa498;--line:#2e2c28;--accent:#e08a66;--ok:#6fbf8a;--bad:#e58a6f}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:var(--accent)}
 .wrap{max-width:680px;margin:0 auto;padding:28px 20px 60px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--ink);text-decoration:none;margin-bottom:26px}
 .brand img{width:28px;height:28px;border-radius:7px}
-h1{font-size:30px;letter-spacing:-0.01em;margin:0 0 8px}
+h1{font:400 44px/1.05 "Newsreader",Georgia,serif;letter-spacing:-0.02em;margin:0 0 12px}
 .lede{color:var(--muted);margin:0 0 24px}
 label{display:block;font-weight:600;font-size:14.5px;margin:18px 0 6px}
 .hint{font-weight:400;color:var(--muted)}
@@ -23,7 +26,7 @@ textarea{min-height:120px;resize:vertical}
 textarea.mono{font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;min-height:220px}
 textarea:focus,input:focus{outline:2px solid var(--accent-hi);outline-offset:1px}
 .trap{position:absolute;left:-5000px}
-button{margin-top:22px;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:12px 24px;font:inherit;font-weight:600;cursor:pointer}
+button{margin-top:22px;background:var(--ink);color:var(--bg);border:0;border-radius:10px;padding:13px 22px;font:inherit;font-weight:600;cursor:pointer}
 button:disabled{opacity:.55;cursor:default}
 .status{margin-top:16px;font-size:15px}
 .status.ok{color:var(--ok)}.status.bad{color:var(--bad)}
