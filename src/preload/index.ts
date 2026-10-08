@@ -37,6 +37,8 @@ export interface ClodAPI {
   onThemeChange(callback: (isDark: boolean) => void): () => void
   /** Fires each time the user shows or hides Clod with the keyboard shortcut */
   onHotkeyUsed(callback: () => void): () => void
+  /** ⌘T ('new') and ⌘W ('close'), caught by the main process */
+  onTabShortcut(callback: (action: 'new' | 'close') => void): () => void
 
   // ─── Window management ───
   hideWindow(): void
@@ -107,6 +109,11 @@ const api: ClodAPI = {
     const handler = (_e: Electron.IpcRendererEvent, isDark: boolean) => callback(isDark)
     ipcRenderer.on(IPC.THEME_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC.THEME_CHANGED, handler)
+  },
+  onTabShortcut: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, action: 'new' | 'close') => callback(action)
+    ipcRenderer.on(IPC.TAB_SHORTCUT, handler)
+    return () => ipcRenderer.removeListener(IPC.TAB_SHORTCUT, handler)
   },
   onHotkeyUsed: (callback) => {
     const handler = () => callback()

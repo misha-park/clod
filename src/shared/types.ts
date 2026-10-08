@@ -386,6 +386,7 @@ export const IPC = {
   // Skill provisioning (main → renderer)
   SKILL_STATUS: 'clod:skill-status',
   HOTKEY_USED: 'clod:hotkey-used',
+  TAB_SHORTCUT: 'clod:tab-shortcut',
 
   // Theme
   GET_THEME: 'clod:get-theme',

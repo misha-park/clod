@@ -58,7 +58,7 @@ struct GuideTopic: Identifiable {
             "The folder chip above the message bar shows where Claude is working. Click it to choose another.",
         ]),
         GuideTopic(title: "Tabs and past conversations", symbol: "clock.arrow.circlepath", color: .brown, tips: [
-            "Click **+** to open another tab. Each tab is its own conversation and keeps working in the background.",
+            "Click **+** or press **⌘T** to open another tab, and **⌘W** to close one. Each tab is its own conversation and keeps working in the background.",
             "Click the clock to browse past conversations. You can search, rename, pin and export them.",
             "Type **?** followed by a word in the message bar to search every past conversation.",
             "Open tabs come back when Clod restarts. Conversations are kept for two weeks unless you pin them.",

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
@@ -110,6 +110,14 @@ export function TabStrip() {
   const createTab = useSessionStore((s) => s.createTab)
   const closeTab = useSessionStore((s) => s.closeTab)
   const isExpanded = useSessionStore((s) => s.isExpanded)
+
+  // ⌘T opens a tab; ⌘W closes the current one, or hides Clod if it's the only tab.
+  useEffect(() => window.clod.onTabShortcut((action) => {
+    const s = useSessionStore.getState()
+    if (action === 'new') s.createTab()
+    else if (s.tabs.length > 1) s.closeTab(s.activeTabId)
+    else window.clod.hideWindow()
+  }), [])
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const setExpandedUI = useThemeStore((s) => s.setExpandedUI)
   const colors = useColors()
@@ -181,15 +189,16 @@ export function TabStrip() {
               )
             })}
           </AnimatePresence>
-          <button
-            onClick={() => createTab()}
-            className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"
-            style={{ color: colors.textTertiary }}
-            title="New tab"
-            aria-label="New tab"
-          >
-            <Plus size={13} />
-          </button>
+          <ButtonHint label="New tab (⌘T)">
+            <button
+              onClick={() => createTab()}
+              className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"
+              style={{ color: colors.textTertiary }}
+              aria-label="New tab"
+            >
+              <Plus size={13} />
+            </button>
+          </ButtonHint>
         </div>
       </div>
 

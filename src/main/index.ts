@@ -216,6 +216,16 @@ function createWindow(): void {
   // The panel's all-spaces/full-screen behaviour keeps it above full-screen apps.
   mainWindow.setAlwaysOnTop(true, 'floating')
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // ⌘T / ⌘W manage tabs. Catch them here, before the standard menu can treat
+  // ⌘W as "Close Window", and let the overlay decide what they do.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.meta || input.control || input.alt || input.shift) return
+    const key = input.key.toLowerCase()
+    if (key !== 't' && key !== 'w') return
+    event.preventDefault()
+    mainWindow?.webContents.send(IPC.TAB_SHORTCUT, key === 't' ? 'new' : 'close')
+  })
+
   mainWindow.webContents.on('will-navigate', (event) => {
     event.preventDefault()
   })
