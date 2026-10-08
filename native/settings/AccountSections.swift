@@ -219,7 +219,7 @@ struct HelpSection: View {
                 Text(error).foregroundStyle(.orange).font(.callout)
             }
         } footer: {
-            Text("Clod is open source under the MIT licence. Based on Clui CC by Lucas Couto.")
+            Text("Clod is open source under the MIT licence.")
                 .foregroundStyle(.secondary)
         }
         .alert("Uninstall Clod?", isPresented: $confirmUninstall) {
