@@ -62,7 +62,8 @@ input::placeholder {
 
 /* ─── Allow text selection in conversation content ─── */
 .prose-cloud,
-.conversation-selectable {
+.conversation-selectable,
+.selectable-text {
   user-select: text;
   -webkit-user-select: text;
 }

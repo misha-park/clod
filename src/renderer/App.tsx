@@ -174,6 +174,8 @@ export default function App() {
       const el = e.target as HTMLElement
       // Skip interactive elements — everything else on the card is draggable
       if (el.closest('button, input, textarea, a, select, [role="button"], [contenteditable], .cm-editor, [data-resize-handle]')) return
+      // Message text: let the drag select it instead of moving the window.
+      if (el.closest('.prose-cloud, .selectable-text, pre, code')) return
       if (!el.closest('[data-clod-ui]')) return
       e.preventDefault()
       // Double-click: snap back to default position

@@ -438,7 +438,7 @@ function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: b
   const colors = useColors()
   const content = (
     <div
-      className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%]"
+      className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%] selectable-text"
       style={{
         background: colors.userBubble,
         color: colors.userBubbleText,
@@ -480,7 +480,7 @@ function QueuedMessage({ content }: { content: string }) {
       className="flex justify-end py-1.5"
     >
       <div
-        className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%]"
+        className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%] selectable-text"
         style={{
           background: colors.userBubble,
           color: colors.userBubbleText,
@@ -924,14 +924,14 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
   const inner = message.shell ? (
     // Output of a `!` command: monospaced, scrollable, full width.
     <div
-      className="text-[11px] leading-[1.45] px-2.5 py-1.5 rounded-lg whitespace-pre-wrap font-mono overflow-y-auto"
+      className="text-[11px] leading-[1.45] px-2.5 py-1.5 rounded-lg whitespace-pre-wrap font-mono overflow-y-auto selectable-text"
       style={{ background: colors.surfaceHover, color: colors.textSecondary, maxHeight: 220 }}
     >
       {message.content}
     </div>
   ) : (
     <div
-      className="text-[11px] leading-[1.5] px-2.5 py-1 rounded-lg inline-block whitespace-pre-wrap"
+      className="text-[11px] leading-[1.5] px-2.5 py-1 rounded-lg inline-block whitespace-pre-wrap selectable-text"
       style={{
         background: isError ? colors.statusErrorBg : colors.surfaceHover,
         color: isError ? colors.statusError : colors.textTertiary,
