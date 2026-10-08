@@ -571,8 +571,11 @@ export const useSessionStore = create<State>((set, get) => ({
 
     if (s.activeTabId === tabId) {
       if (remaining.length === 0) {
-        const newTab = makeLocalTab()
-        set({ tabs: [newTab], activeTabId: newTab.id })
+        // Closing the last tab leaves a fresh one, registered with the main
+        // process like any other tab so messages can be sent from it.
+        const dir = s.defaultDirOverride || s.staticInfo?.defaultDir || s.staticInfo?.homePath || '~'
+        const replace = (id: string) => set({ tabs: [{ ...makeLocalTab(), id, workingDirectory: dir }], activeTabId: id })
+        window.clod.createTab().then(({ tabId: id }) => replace(id), () => replace(makeLocalTab().id))
         return
       }
       const closedIndex = s.tabs.findIndex((t) => t.id === tabId)

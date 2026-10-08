@@ -253,8 +253,8 @@ export class ControlPlane extends EventEmitter {
 
   // ─── Tab Lifecycle ───
 
-  createTab(): string {
-    const tabId = crypto.randomUUID()
+  /** Register a tab. An id is passed when adopting a tab the overlay made on its own. */
+  createTab(tabId: string = crypto.randomUUID()): string {
     const entry: TabRegistryEntry = {
       tabId,
       claudeSessionId: null,
@@ -346,10 +346,13 @@ export class ControlPlane extends EventEmitter {
       throw new Error('No targetSession (tabId) provided — rejecting to prevent misrouting')
     }
 
-    const tab = this.tabs.get(tabId)
-    if (!tab) {
-      throw new Error(`Tab ${tabId} does not exist`)
+    // A tab the overlay made without telling us (e.g. a fallback after an
+    // error): adopt it rather than failing the message.
+    if (!this.tabs.has(tabId)) {
+      log(`Adopting unknown tab ${tabId}`)
+      this.createTab(tabId)
     }
+    const tab = this.tabs.get(tabId)!
 
     // ─── Guard: requestId idempotency (check inflight AND queue) ───
     const existing = this.inflightRequests.get(requestId)
