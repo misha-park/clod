@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clod film</title>
+<script src="clock.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&display=block">
+<style>
+:root{--ivory:#f0ede5;--oat:#e3dbcd;--slate:#191917;--soft:#6b665c;--clay:#c4623d;--line:rgba(25,25,23,.08)}
+*{box-sizing:border-box}
+html,body{margin:0;width:1440px;height:810px;overflow:hidden;background:var(--ivory)}
+body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--slate);-webkit-font-smoothing:antialiased}
+.serif{font-family:"Newsreader",Georgia,serif;font-weight:400}
+#film{position:relative;width:1440px;height:810px}
+
+/* Title and end cards */
+.card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.card h1{font:400 64px/1.05 "Newsreader",Georgia,serif;letter-spacing:-.02em;margin:0}
+.card h1 em{color:var(--clay)}
+.card .mark{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;margin-bottom:26px}
+.card .mark img{width:26px;height:26px;border-radius:6px}
+.card p{margin:18px 0 0;font-size:17px;color:var(--soft)}
+#end h1{font-size:76px}
+#end .url{margin-top:30px;font-size:15px;color:var(--soft);letter-spacing:.01em}
+
+/* The screen */
+#screen{position:absolute;left:100px;top:34px;width:1240px;height:698px;border-radius:18px;overflow:hidden;
+  background:radial-gradient(120% 90% at 22% 18%,#e9e1d4 0%,#ddd3c3 55%,#d4c8b6 100%);
+  box-shadow:0 0 0 1px rgba(25,25,23,.07),0 30px 70px rgba(60,45,30,.16),0 8px 20px rgba(60,45,30,.08)}
+#cam{position:absolute;inset:0;transform-origin:76% 78%}
+#menubar{position:absolute;top:0;left:0;right:0;height:26px;background:rgba(250,248,243,.55);backdrop-filter:blur(10px);
+  display:flex;align-items:center;justify-content:flex-end;gap:16px;padding:0 14px;font-size:12.5px;color:#2b2a26}
+#menubar .tray{display:flex;align-items:center;justify-content:center;width:24px;height:19px;border-radius:5px}
+#menubar .tray img{width:15px;height:15px;opacity:.85}
+
+/* A plain file window */
+.win{position:absolute;left:58px;top:74px;width:430px;background:#fbfaf7;border-radius:12px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(25,25,23,.08),0 18px 44px rgba(60,45,30,.16)}
+.win .bar{height:38px;display:flex;align-items:center;padding:0 14px;position:relative;border-bottom:1px solid var(--line);background:#f6f4ef}
+.win .dots{display:flex;gap:7px}.win .dots i{width:11px;height:11px;border-radius:50%;background:#dcd7cc;display:block}
+.win .title{position:absolute;left:0;right:0;text-align:center;font-weight:600;font-size:13px;color:#33312c;pointer-events:none}
+.win .head{display:flex;padding:7px 16px 5px;font-size:11px;color:#8d887d;border-bottom:1px solid var(--line)}
+.win .head span:first-child{flex:1}
+.rows{padding:4px 0 8px}
+.row{display:flex;align-items:center;gap:10px;padding:0 16px;height:26px;font-size:12.5px;overflow:hidden;white-space:nowrap}
+.row .name{flex:1;overflow:hidden;text-overflow:ellipsis}
+.row .size{color:#8d887d;font-size:11.5px;font-variant-numeric:tabular-nums}
+.glyph{width:13px;height:16px;border-radius:2.5px;flex-shrink:0;position:relative}
+.glyph::after{content:"";position:absolute;right:0;top:0;width:5px;height:5px;background:rgba(255,255,255,.55);border-bottom-left-radius:2px}
+.g-pdf{background:#d9705c}.g-img{background:#6c9bc9}.g-dmg{background:#9b92ad}.g-doc{background:#5684c4}.g-xls{background:#4f9a68}
+.folder{width:16px;height:12px;border-radius:2px;background:#86a3c4;position:relative;margin-top:2px;flex-shrink:0}
+.folder::before{content:"";position:absolute;left:0;top:-3px;width:7px;height:4px;border-radius:2px 2px 0 0;background:#86a3c4}
+
+/* Clod: the real interface, unchanged */
+#clodwrap{position:absolute;right:14px;bottom:10px;width:1040px;height:720px;pointer-events:none}
+#clod{width:1040px;height:720px;border:0;background:transparent}
+
+/* Keyboard hint */
+#keys{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;
+  padding:12px 16px 12px 12px;border-radius:16px;background:rgba(250,248,243,.82);backdrop-filter:blur(12px);
+  box-shadow:0 0 0 1px rgba(25,25,23,.06),0 10px 30px rgba(60,45,30,.14)}
+.key{width:58px;height:54px;border-radius:10px;background:#fff;box-shadow:0 0 0 1px rgba(25,25,23,.12),0 3px 0 rgba(25,25,23,.14);
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;padding:6px 8px;font-size:12px;color:#3a3833}
+.key b{font-size:18px;font-weight:400;align-self:flex-end;line-height:1}
+#keys .label{font-size:14px;color:#3a3833}
+
+/* Pointer */
+#cursor{position:absolute;left:0;top:0;width:24px;height:24px;pointer-events:none}
+#ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid rgba(255,255,255,.9);
+  box-shadow:0 0 0 1px rgba(25,25,23,.15);opacity:0;pointer-events:none}
+
+/* Captions */
+#caption{position:absolute;left:100px;right:100px;top:748px;height:44px}
+#caption div{position:absolute;left:0;top:0;font:400 26px/1.3 "Newsreader",Georgia,serif;color:var(--slate);letter-spacing:-.005em;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="film">
+  <div id="title" class="card">
+    <div class="mark"><img src="icon.png" alt="">Clod</div>
+    <h1>Claude, one <em>double-tap</em> away.</h1>
+  </div>
+
+  <div id="screen">
+    <div id="cam">
+    <div id="menubar"><span class="tray"><img src="tray.png" alt=""></span><span>Thu 10:42</span></div>
+    <div class="win" id="files">
+      <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="title">Downloads</div></div>
+      <div class="head"><span>Name</span><span>Size</span></div>
+      <div class="rows" id="rows"></div>
+    </div>
+    <div id="clodwrap"><iframe id="clod" src="clod/index.html?film"></iframe></div>
+    </div>
+    <div id="keys"><div class="key"><span>option</span><b>⌥</b></div><span class="label">Double-tap Option</span></div>
+    <div id="ripple"></div>
+    <svg id="cursor" viewBox="0 0 24 24"><path d="M5 2.5v17.2l4.3-4.1 2.8 6.4 2.7-1.2-2.8-6.3h6z" fill="#141413" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  </div>
+
+  <div id="caption"></div>
+
+  <div id="end" class="card">
+    <div class="mark"><img src="icon.png" alt="">Free for Mac</div>
+    <h1>Clod</h1>
+    <p>Claude, one double-tap away.</p>
+    <div class="url">misha-park.github.io/clod</div>
+  </div>
+</div>
+<script>
+// ─── Easing and time helpers ───
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
+const ease = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2   // in-out cubic
+const out = (t) => 1 - Math.pow(1 - t, 3)                                       // out cubic
+const span = (t, a, b) => clamp((t - a) / (b - a))                               // 0..1 progress through [a, b]
+/** Fade in over [a, a+d], hold, fade out over [b-d, b]. */
+const window_ = (t, a, b, d = .45) => Math.min(ease(span(t, a, a + d)), 1 - ease(span(t, b - d, b)))
+
+// ─── The story ───
+const DURATION = 25.5
+const PROMPT = 'Sort my Downloads into folders and bin any duplicates'
+
+const FILES = [
+  { name: 'invoice-march.pdf', g: 'pdf', size: '182 KB', to: 'Documents', at: 11.0 },
+  { name: 'IMG_2041.jpg', g: 'img', size: '3.1 MB', to: 'Images', at: 11.6 },
+  { name: 'VideoChat.dmg', g: 'dmg', size: '94 MB', to: 'Installers', at: 12.2 },
+  { name: 'Screenshot 2026-09-14.png', g: 'img', size: '812 KB', to: 'Images', at: 11.68 },
+  { name: 'invoice (1).pdf', g: 'pdf', size: '182 KB', to: 'Bin', at: 14.6 },
+  { name: 'budget-2026.xlsx', g: 'xls', size: '46 KB', to: 'Documents', at: 11.08 },
+  { name: 'IMG_2041 (1).jpg', g: 'img', size: '3.1 MB', to: 'Bin', at: 14.68 },
+  { name: 'cover-letter.docx', g: 'doc', size: '28 KB', to: 'Documents', at: 11.16 },
+  { name: 'PhotoEditor.dmg', g: 'dmg', size: '211 MB', to: 'Installers', at: 12.28 },
+  { name: 'IMG_2042.jpg', g: 'img', size: '2.8 MB', to: 'Images', at: 11.76 },
+  { name: 'IMG_2042 (1).jpg', g: 'img', size: '2.8 MB', to: 'Bin', at: 14.76 },
+  { name: 'notes.pdf', g: 'pdf', size: '64 KB', to: 'Documents', at: 11.24 },
+  { name: 'VideoChat (1).dmg', g: 'dmg', size: '94 MB', to: 'Bin', at: 14.84 },
+]
+const FOLDERS = [
+  { name: 'Documents', at: 10.4 },
+  { name: 'Images', at: 10.48 },
+  { name: 'Installers', at: 10.56 },
+]
+const CAPTIONS = [
+  [3.9, 5.6, 'Double-tap Option in any app,'],
+  [5.6, 8.8, 'and ask Claude in plain English.'],
+  [8.9, 12.6, 'It works right on your files,'],
+  [12.7, 15.1, 'and checks with you before changing anything.'],
+  [15.2, 19.3, 'Then it tells you what it did.'],
+  [19.4, 21.7, 'Double-tap again, and it’s out of your way.'],
+]
+const REPLY = `Done. I sorted 9 files into three new folders:
+
+- **Documents**: 4 PDFs, spreadsheets and Word files
+- **Images**: 3 photos and screenshots
+- **Installers**: 2 \`.dmg\` files
+
+I moved the 4 duplicates to the Bin rather than deleting them, so you can still get them back.`
+
+// ─── Build the file window ───
+const rowsEl = document.getElementById('rows')
+const rowEls = new Map()
+for (const f of FOLDERS) {
+  const el = document.createElement('div'); el.className = 'row'
+  el.innerHTML = `<span class="folder"></span><span class="name">${f.name}</span><span class="size">0 items</span>`
+  rowsEl.appendChild(el); rowEls.set(f, el)
+}
+for (const f of FILES) {
+  const el = document.createElement('div'); el.className = 'row'
+  el.innerHTML = `<span class="glyph g-${f.g}"></span><span class="name">${f.name}</span><span class="size">${f.size}</span>`
+  rowsEl.appendChild(el); rowEls.set(f, el)
+}
+
+// ─── Clod (the real interface, in the iframe) ───
+const frame = document.getElementById('clod')
+const iwin = () => frame.contentWindow
+const idoc = () => frame.contentDocument
+const store = () => iwin().__clod.useSessionStore
+let msgId = 0
+const msg = (role, content, extra = {}) => ({ id: `film-${++msgId}`, role, content, timestamp: 0, ...extra })
+const makeTab = (id, title, extra = {}) => ({
+  id, claudeSessionId: null, status: 'idle', activeRequestId: null, hasUnread: false, currentActivity: '',
+  permissionQueue: [], permissionDenied: null, attachments: [], messages: [], title, lastResult: null,
+  sessionModel: null, sessionTools: [], sessionMcpServers: [], sessionSkills: [], sessionVersion: null,
+  queuedPrompts: [], pendingShellOutputs: [], workingDirectory: '/Users/sam/Downloads', hasChosenDirectory: true,
+  additionalDirs: [], ...extra,
+})
+const editTab = (fn) => store().setState((s) => ({ tabs: s.tabs.map((t) => (t.id === 'a' ? { ...t, ...fn(t) } : t)) }))
+const tool = (command) => msg('tool', '', { toolName: 'Bash', toolInput: JSON.stringify({ command }), toolStatus: 'running' })
+const addTool = (command, activity) => editTab((t) => ({
+  currentActivity: activity,
+  messages: [...t.messages.map((m) => (m.role === 'tool' ? { ...m, toolStatus: 'completed' } : m)), tool(command)],
+}))
+const finishTools = () => editTab((t) => ({ messages: t.messages.map((m) => (m.role === 'tool' ? { ...m, toolStatus: 'completed' } : m)) }))
+
+function typeInto(text) {
+  const ta = idoc().querySelector('textarea')
+  const setter = Object.getOwnPropertyDescriptor(iwin().HTMLTextAreaElement.prototype, 'value').set
+  setter.call(ta, text)
+  ta.dispatchEvent(new (iwin().Event)('input', { bubbles: true }))
+}
+
+// Pointer target: the real "Allow" button, wherever Clod laid it out.
+let allowAt = null
+function findAllow() {
+  const b = [...idoc().querySelectorAll('button')].find((el) => el.textContent.trim() === 'Allow')
+  if (!b) return null
+  const r = b.getBoundingClientRect(), f = frame.getBoundingClientRect(), s = document.getElementById('screen').getBoundingClientRect()
+  const k = f.width / 1040 // the camera's zoom
+  return { x: f.left - s.left + (r.left + r.width / 2) * k, y: f.top - s.top + (r.top + r.height / 2) * k }
+}
+
+// ─── Events: things that happen once, at a moment ───
+const EVENTS = [
+  [0.0, () => {
+    iwin().__clod.useThemeStore.setState({ inputPlaceholder: '' })
+    store().setState({ tabs: [makeTab('a', 'New Tab'), makeTab('b', 'Holiday budget'), makeTab('c', 'Explain this error')], activeTabId: 'a', isExpanded: false })
+  }],
+  [4.8, () => idoc().querySelector('textarea')?.focus()],
+  [8.9, () => {
+    typeInto('')
+    store().setState({ isExpanded: true })
+    editTab(() => ({ title: 'Tidy up Downloads', status: 'running', currentActivity: 'Thinking…', messages: [msg('user', PROMPT)] }))
+  }],
+  [9.5, () => addTool('ls -la ~/Downloads', 'Reading Downloads…')],
+  [10.2, () => addTool('mkdir -p Documents Images Installers', 'Making folders…')],
+  [10.9, () => addTool('mv *.pdf *.xlsx *.docx Documents/', 'Moving documents…')],
+  [11.5, () => addTool('mv *.jpg *.png Images/', 'Moving images…')],
+  [12.1, () => addTool('mv *.dmg Installers/', 'Moving installers…')],
+  [12.8, () => {
+    finishTools()
+    editTab(() => ({
+      currentActivity: 'Waiting for permission: Bash',
+      permissionQueue: [{
+        questionId: 'film-q', toolTitle: 'Bash', toolDescription: 'Move 4 duplicate files to the Bin',
+        toolInput: { command: 'mv "invoice (1).pdf" "IMG_2041 (1).jpg" "IMG_2042 (1).jpg" "VideoChat (1).dmg" ~/.Trash/' },
+        options: [{ optionId: 'allow', kind: 'allow', label: 'Allow' }, { optionId: 'deny', kind: 'deny', label: 'Deny' }],
+      }],
+    }))
+  }],
+  [13.1, () => { allowAt = findAllow() }],
+  [14.45, () => {
+    editTab(() => ({ permissionQueue: [] }))
+    addTool('mv "invoice (1).pdf" "IMG_2041 (1).jpg" … ~/.Trash/', 'Moving duplicates to the Bin…')
+  }],
+  [15.2, () => { finishTools(); editTab((t) => ({ currentActivity: 'Writing…', messages: [...t.messages, msg('assistant', '', { id: 'reply' })] })) }],
+  [18.1, () => editTab(() => ({ status: 'completed', currentActivity: '' }))],
+]
+
+// Typing and streaming: content as a function of time.
+const typedAt = (t) => {
+  const a = 5.4, perChar = 0.056
+  return PROMPT.slice(0, clamp(Math.floor((t - a) / perChar), 0, PROMPT.length))
+}
+const replyAt = (t) => REPLY.slice(0, Math.floor(clamp((t - 15.4) / 2.5) * REPLY.length))
+
+// ─── Render: everything else is a pure function of time ───
+const $ = (id) => document.getElementById(id)
+let fired = 0, lastTyped = null, lastReply = null
+function render(t) {
+  while (fired < EVENTS.length && t >= EVENTS[fired][0]) { try { EVENTS[fired][1]() } catch (e) { console.error(e) } ; fired++ }
+
+  // Title and end cards
+  const ti = window_(t, 0.25, 3.15, .7)
+  $('title').style.opacity = ti
+  $('title').style.transform = `translateY(${(1 - ease(span(t, .25, 1.0))) * 10}px)`
+  const en = Math.min(ease(span(t, 22.2, 23.0)), 1 - ease(span(t, 24.9, 25.5)))
+  $('end').style.opacity = en
+  $('end').style.transform = `translateY(${(1 - ease(span(t, 22.2, 23.1))) * 10}px)`
+
+  // Screen
+  const sc = Math.min(ease(span(t, 3.0, 3.8)), 1 - ease(span(t, 21.7, 22.4)))
+  $('screen').style.opacity = sc
+  $('screen').style.transform = `scale(${0.985 + 0.015 * sc})`
+
+  // Camera: a slow push in towards Clod while Claude works, then back out
+  const cam = 1 + 0.045 * Math.min(ease(span(t, 8.9, 12.2)), 1 - ease(span(t, 19.3, 20.6)))
+  $('cam').style.transform = `scale(${cam})`
+
+  // Clod appears after the double-tap, and leaves after the second
+  const shown = Math.min(out(span(t, 4.7, 5.05)), 1 - ease(span(t, 20.45, 20.75)))
+  $('clodwrap').style.opacity = shown
+  $('clodwrap').style.transform = `translateY(${(1 - shown) * 16}px)`
+
+  // Keyboard hint, with the key going down on each tap
+  const k = Math.max(window_(t, 3.85, 5.1, .3), window_(t, 19.55, 20.85, .3))
+  $('keys').style.opacity = k
+  $('keys').style.transform = `translateX(-50%) translateY(${(1 - k) * 8}px)`
+  const down = [4.25, 4.55, 20.0, 20.3].some((p) => t >= p && t < p + .12)
+  const key = $('keys').querySelector('.key')
+  key.style.transform = down ? 'translateY(2px)' : ''
+  key.style.boxShadow = down ? '0 0 0 1px rgba(25,25,23,.14),0 1px 0 rgba(25,25,23,.14)' : ''
+  key.style.background = down ? '#f4f1ea' : '#fff'
+
+  // Typing and the streamed reply in the real Clod
+  if (t >= 5.4 && t < 8.9) { const v = typedAt(t); if (v !== lastTyped) { lastTyped = v; typeInto(v) } }
+  if (t >= 15.4 && t < 18.2) {
+    const v = replyAt(t)
+    if (v !== lastReply) { lastReply = v; editTab((tab) => ({ messages: tab.messages.map((m) => (m.id === 'reply' ? { ...m, content: v } : m)) })) }
+  }
+
+  // Files: folders appear; files fold away into them (or the Bin)
+  for (const f of FOLDERS) {
+    const el = rowEls.get(f), p = out(span(t, f.at, f.at + .35))
+    el.style.height = `${26 * p}px`; el.style.opacity = p
+    const n = FILES.filter((x) => x.to === f.name && t >= x.at + .2).length
+    el.querySelector('.size').textContent = `${n} item${n === 1 ? '' : 's'}`
+  }
+  for (const f of FILES) {
+    const el = rowEls.get(f), p = ease(span(t, f.at, f.at + .4))
+    el.style.height = `${26 * (1 - p)}px`; el.style.opacity = 1 - p
+    el.style.transform = `translateX(${p * 18}px)`
+  }
+
+  // Pointer: glides to Allow, clicks, drifts off
+  const c = $('cursor'), r = $('ripple')
+  if (t >= 13.1 && t < 14.45) allowAt = findAllow() || allowAt
+  if (allowAt && t >= 13.1 && t < 15.6) {
+    const from = { x: allowAt.x + 260, y: allowAt.y + 150 }, to = { x: allowAt.x + 4, y: allowAt.y + 2 }
+    const m = ease(span(t, 13.25, 14.15)), leave = ease(span(t, 14.75, 15.5))
+    const x = from.x + (to.x - from.x) * m + leave * 120, y = from.y + (to.y - from.y) * m + leave * 70
+    const press = t >= 14.3 && t < 14.42 ? .88 : 1
+    c.style.opacity = Math.min(ease(span(t, 13.1, 13.4)), 1 - ease(span(t, 15.1, 15.55)))
+    c.style.transform = `translate(${x - 5}px, ${y - 2}px) scale(${press})`
+    const rp = span(t, 14.3, 14.75)
+    r.style.left = `${to.x}px`; r.style.top = `${to.y}px`
+    r.style.opacity = rp > 0 && rp < 1 ? (1 - rp) * .9 : 0
+    r.style.transform = `scale(${.4 + rp * 1.1})`
+  } else { c.style.opacity = 0; r.style.opacity = 0 }
+
+  // Captions
+  const cap = $('caption')
+  const active = CAPTIONS.filter(([a, b]) => t >= a - .1 && t < b + .1)
+  cap.innerHTML = active.map(([a, b, text]) => {
+    const o = window_(t, a, b, .35), y = (1 - ease(span(t, a, a + .4))) * 6
+    return `<div style="opacity:${o};transform:translateY(${y}px)">${text}</div>`
+  }).join('')
+}
+
+// ─── Driven by the recorder (or played live in a browser for previewing) ───
+window.__film = {
+  duration: DURATION,
+  t: 0,
+  /** Advance the film (and Clod inside it) by one frame and wait for it to paint. */
+  async step(ms) {
+    this.t += ms / 1000
+    iwin().__clock.advance(ms)
+    window.__clock.advance(ms)
+    render(this.t)
+    await Promise.all([window.__clock.painted(), iwin().__clock.painted()])
+  },
+}
+
+async function ready() {
+  await document.fonts.ready
+  await new Promise((r) => (frame.contentDocument?.readyState === 'complete' && iwin().__clod ? r() : frame.addEventListener('load', () => r(), { once: true })))
+  // (The page's own timers are frozen until recording starts, so wait on real frames.)
+  for (let i = 0; i < 300 && !(iwin().__clod && iwin().__clock); i++) await window.__clock.painted()
+  // Hide the caret: its blink runs on real time and would flicker between frames.
+  const style = idoc().createElement('style'); style.textContent = 'textarea{caret-color:transparent!important}'
+  idoc().head.appendChild(style)
+  render(0)
+  window.__filmReady = true
+}
+ready()
+</script>
+</body>
+</html>

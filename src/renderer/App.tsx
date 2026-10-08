@@ -12,6 +12,7 @@ import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useFolderDrop } from './hooks/useFolderDrop'
 import { useExplainSelection, useProblemPrompts } from './hooks/useExplainSelection'
 import { listenForDemoScenes } from './demo'
+import { startFilm } from './film'
 import { ResizeHandles } from './components/ResizeHandles'
 import { SessionBrowser } from './components/history/SessionBrowser'
 import { overlaySize, windowSizeFor } from '../shared/layout'
@@ -165,6 +166,7 @@ export default function App() {
 
   // Dev/QA snapshots (CLOD_SNAPSHOT_DIR): the main process asks the overlay to open.
   useEffect(() => listenForDemoScenes(), [])
+  useEffect(() => startFilm(), [])
 
   useEffect(() => {
     const open = () => useSessionStore.setState({ isExpanded: true })

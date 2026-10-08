@@ -1240,7 +1240,10 @@ onExternalSettingsChange((raw) => {
 // Remember which conversations are open (only tabs that have one), so the next
 // launch can reopen them. Writes only when the list actually changes.
 let lastSavedTabs = ''
+// (Film mode shows made-up tabs; never let them replace the real ones.)
+const filmMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('film')
 useSessionStore.subscribe((state) => {
+  if (filmMode) return
   const tabs = state.tabs
     .filter((t) => t.claudeSessionId)
     .map((t) => ({ sessionId: t.claudeSessionId!, title: t.title, projectPath: t.workingDirectory }))

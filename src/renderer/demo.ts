@@ -79,6 +79,12 @@ const SCENES: Record<string, () => void> = {
   },
 }
 
+// Film mode (scripts/film): the film set drives the real interface through
+// the stores directly. Only exposed when the page is loaded with ?film.
+if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('film')) {
+  ;(window as unknown as Record<string, unknown>).__clod = { useSessionStore, useThemeStore }
+}
+
 /** Listen for demo scenes. Never persists anything: setState bypasses the stores' save paths. */
 export function listenForDemoScenes(): () => void {
   const onScene = (e: Event) => {

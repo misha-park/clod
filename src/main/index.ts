@@ -264,7 +264,8 @@ function createWindow(): void {
   })
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
+    // Film mode starts hidden: the double-tap that brings Clod in starts the demo.
+    if (!process.env.CLOD_FILM) mainWindow?.show()
     // Enable OS-level click-through for transparent regions.
     // { forward: true } ensures mousemove events still reach the renderer
     // so it can toggle click-through off when cursor enters interactive UI.
@@ -305,7 +306,9 @@ function createWindow(): void {
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    // CLOD_FILM=1: play the scripted demo for screen recordings (src/renderer/film.ts).
+    const query: Record<string, string> = process.env.CLOD_FILM ? { film: '1', dir: process.env.CLOD_FILM_DIR || '' } : {}
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'), { query })
   }
 
   startCursorTracking()
@@ -1312,7 +1315,7 @@ app.whenReady().then(async () => {
   // guided setup (in the settings app) instead of prompting for permissions.
   // Users who already have it all are marked as set up without seeing it.
   await startSetupServer(() => controlPlane.restartIdleProcesses())
-  if (getSettings().setupCompleted !== true && !process.env.CLOD_DEMO) {
+  if (getSettings().setupCompleted !== true && !process.env.CLOD_DEMO && !process.env.CLOD_FILM) {
     if (isSetUp()) saveSettings({ setupCompleted: true })
     else {
       saveSettings({ showSetup: true })
