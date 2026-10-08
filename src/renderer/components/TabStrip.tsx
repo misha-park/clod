@@ -111,12 +111,11 @@ export function TabStrip() {
   const closeTab = useSessionStore((s) => s.closeTab)
   const isExpanded = useSessionStore((s) => s.isExpanded)
 
-  // ⌘T opens a tab; ⌘W closes the current one, or hides Clod if it's the only tab.
+  // ⌘T opens a tab; ⌘W closes the current one (closing the last tab leaves a fresh, empty one).
   useEffect(() => window.clod.onTabShortcut((action) => {
     const s = useSessionStore.getState()
     if (action === 'new') s.createTab()
-    else if (s.tabs.length > 1) s.closeTab(s.activeTabId)
-    else window.clod.hideWindow()
+    else s.closeTab(s.activeTabId)
   }), [])
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const setExpandedUI = useThemeStore((s) => s.setExpandedUI)
