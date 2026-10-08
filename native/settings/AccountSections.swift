@@ -127,21 +127,49 @@ struct PermissionRow: View {
 }
 
 /// Shown at the top of the settings when GitHub has a newer Clod.
-struct UpdateBanner: View {
+/// A newer Clod on GitHub, and how far its download has got.
+struct UpdateInfo {
     let version: String
     let url: URL
+    var progress: Double?
+    var downloaded = false
+    var error: String?
+}
+
+/// Shown when GitHub has a newer Clod. "Download and install" saves the DMG,
+/// opens it and quits Clod, leaving only the drag into Applications.
+struct UpdateBanner: View {
+    let update: UpdateInfo
+    @State private var failed: String?
 
     var body: some View {
         HStack(spacing: 10) {
             SettingIcon(symbol: "arrow.down.circle.fill", color: .green)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Clod \(version) is available").font(.headline)
-                Text("Download it, then drag it into Applications to replace this version.")
-                    .font(.callout).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Clod \(update.version) is available").font(.headline)
+                if update.downloaded {
+                    Text("Opened. Drag Clod into Applications and choose Replace.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else if let progress = update.progress, update.error == nil {
+                    ProgressView(value: progress).frame(maxWidth: 220)
+                    Text("Downloading… Clod will quit when it's ready so it can be replaced.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Text(failed ?? update.error ?? "Clod downloads it, opens it and quits. Then drag Clod into Applications.")
+                        .font(.callout)
+                        .foregroundStyle(failed ?? update.error == nil ? Color.secondary : Color.orange)
+                }
             }
             Spacer()
-            Button("Download") { NSWorkspace.shared.open(url) }
+            if update.progress == nil || update.error != nil {
+                Button("Download and install") {
+                    Task {
+                        do { try await ClodControl.send("downloadUpdate"); failed = nil }
+                        catch { failed = error.localizedDescription }
+                    }
+                }
                 .buttonStyle(.borderedProminent)
+            }
         }
     }
 }
@@ -219,7 +247,7 @@ struct UpdatesSection: View {
     var body: some View {
         Section {
             if let update = model.update {
-                UpdateBanner(version: update.version, url: update.url)
+                UpdateBanner(update: update)
             } else {
                 LabeledContent {
                     Text("Up to date").foregroundStyle(.secondary)

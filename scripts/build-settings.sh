@@ -44,3 +44,9 @@ PLIST
 # Ad-hoc sign so it runs standalone; the installer re-signs the whole of Clod.app.
 codesign --force --sign - "$APP" >/dev/null
 echo "Built $APP"
+
+# Helper for "Explain selection": reads the selected text via Accessibility.
+echo "Compiling clod-selection…"
+xcrun swiftc -O -target arm64-apple-macos13.0 -o dist-native/clod-selection native/selection/main.swift
+codesign --force --sign - dist-native/clod-selection >/dev/null 2>&1 || true
+echo "Built dist-native/clod-selection"

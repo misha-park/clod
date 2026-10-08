@@ -9,7 +9,8 @@ import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './m
 import { log as _log, flushLogs } from './logger'
 import { getCliEnv, getClaudeEnv } from './cli-env'
 import { isSetUp, refreshPermissionState, startSetupServer, stopSetupServer } from './setup'
-import { startUpdateChecks, type AvailableUpdate } from './updates'
+import { downloadUpdate, startUpdateChecks, type AvailableUpdate } from './updates'
+import { DEFAULT_EXPLAIN_SHORTCUT, registerExplainShortcut } from './explain-selection'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
@@ -279,6 +280,7 @@ function createWindow(): void {
   if (process.env.CLOD_SNAPSHOT_DIR) scheduleSnapshots(process.env.CLOD_SNAPSHOT_DIR)
   watchSettings((settings) => {
     log('Settings changed externally — applying')
+    applyExplainShortcut()
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.SETTINGS_CHANGED, settings)
   })
   let accessibilityWasGranted: boolean | null = null
@@ -1231,6 +1233,19 @@ async function requestPermissions(): Promise<void> {
   // the screenshot feature is actually used.
 }
 
+// ─── Explain selection ───
+
+/** Register the "explain selection" shortcut from settings ('' = off). */
+function applyExplainShortcut(): void {
+  const saved = getSettings().explainShortcut
+  const accelerator = typeof saved === 'string' ? saved : DEFAULT_EXPLAIN_SHORTCUT
+  registerExplainShortcut(accelerator, (text) => {
+    showWindow('explain selection')
+    const reason = text ? null : process.platform === 'darwin' && !systemPreferences.isTrustedAccessibilityClient(false) ? 'accessibility' : 'empty'
+    mainWindow?.webContents.send(IPC.EXPLAIN_SELECTION, text, reason)
+  })
+}
+
 // ─── App Lifecycle ───
 
 app.whenReady().then(async () => {
@@ -1298,6 +1313,7 @@ app.whenReady().then(async () => {
   // Fallback: Cmd+Shift+K always works even if Accessibility is denied.
   registerOptionDoubleTap(() => { if (hotkeyMode === 'double-option') toggleWindow('double-tap Option') })
   globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
+  applyExplainShortcut()
 
   const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
   const trayIcon = nativeImage.createFromPath(trayIconPath)
@@ -1309,7 +1325,7 @@ app.whenReady().then(async () => {
     tray?.setContextMenu(
       Menu.buildFromTemplate([
         ...(update ? [
-          { label: `Clod ${update.version} is available…`, click: () => { shell.openExternal(update.url) } },
+          { label: `Download Clod ${update.version}…`, click: () => { downloadUpdate().catch(() => shell.openExternal(update.url)) } },
           { type: 'separator' as const },
         ] : []),
         { label: 'Show Clod', click: () => showWindow('tray menu') },

@@ -26,6 +26,8 @@ Then double-tap **⌥ Option**, type a question and press **Return**.
 ## Using Clod
 
 - **Double-tap ⌥ Option** (or press **⌘⇧K**) to show or hide Clod. You can change the shortcut in Settings.
+- **Select text in any app and press ⌥⌘E**: Clod opens and asks Claude to explain it. No need to copy it first; the shortcut can be changed or turned off in Settings → General.
+- **⌘T** opens a tab and **⌘W** closes one. Unsent text stays with its tab.
 - Clod lives in the **menu bar**, not the Dock.
 - **Attach** files with the paperclip, **paste** images, or capture part of your screen with the **camera**.
 - **Drag a folder** onto Clod to make Claude work in it.

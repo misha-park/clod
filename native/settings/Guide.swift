@@ -50,6 +50,7 @@ struct GuideTopic: Identifiable {
             "Messages sent while Claude is busy wait in line and go next.",
             "Start a message with **!** to run a Terminal command directly, for example `!ls`.",
             "Type **/** to see commands such as `/clear`, `/cost` and `/skills`.",
+            "Select text in any app and press **⌥⌘E**: Clod opens and asks Claude to explain it. Change the shortcut in **General**.",
         ]),
         GuideTopic(title: "Files, folders and screenshots", symbol: "paperclip", color: .cyan, tips: [
             "Click the paperclip to attach files, or paste an image straight into the message bar.",

@@ -387,6 +387,7 @@ export const IPC = {
   SKILL_STATUS: 'clod:skill-status',
   HOTKEY_USED: 'clod:hotkey-used',
   TAB_SHORTCUT: 'clod:tab-shortcut',
+  EXPLAIN_SELECTION: 'clod:explain-selection',
 
   // Theme
   GET_THEME: 'clod:get-theme',

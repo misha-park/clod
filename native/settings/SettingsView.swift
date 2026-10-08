@@ -86,7 +86,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var startPage: some View {
         if let update = model.update {
-            Section { UpdateBanner(version: update.version, url: update.url) }
+            Section { UpdateBanner(update: update) }
         }
         Section {
             HeaderView()
@@ -134,6 +134,25 @@ struct SettingsView: View {
             Text("Shortcut")
         } footer: {
             Text("⌘⇧K always shows Clod too.").foregroundStyle(.secondary)
+        }
+        Section {
+            LabeledContent {
+                HStack {
+                    ShortcutRecorder(current: model.explainShortcut) { accel in
+                        model.set("explainShortcut", accel)
+                    }
+                    if model.explainShortcut.isEmpty {
+                        Button("Turn on") { model.set("explainShortcut", SettingsModel.defaultExplainShortcut) }
+                    } else {
+                        Button("Turn off") { model.set("explainShortcut", "") }
+                    }
+                }
+            } label: {
+                RowLabel("Explain selected text", symbol: "text.magnifyingglass", color: .clodAccent)
+            }
+        } footer: {
+            Text("Select text in any app and press this: Clod opens and asks Claude to explain it. You don't need to copy anything first.")
+                .foregroundStyle(.secondary)
         }
     }
 

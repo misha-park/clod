@@ -60,6 +60,10 @@
         {
           "from": "dist-native/Clod Settings.app",
           "to": "Helpers/Clod Settings.app"
+        },
+        {
+          "from": "dist-native/clod-selection",
+          "to": "Helpers/clod-selection"
         }
       ],
       "minimumSystemVersion": "13.0"

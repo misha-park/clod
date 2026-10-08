@@ -18,6 +18,9 @@ const INLINE_CONTROLS_RESERVED_WIDTH = 104
  * InputBar renders inside a glass-surface rounded-full pill provided by App.tsx.
  * It provides: textarea + attach/screenshot/send buttons. Attachment chips render above when present.
  */
+/** Unsent text per tab, so switching tabs doesn't lose what you were typing. */
+const drafts = new Map<string, string>()
+
 export function InputBar() {
   const [input, setInput] = useState('')
   const [slashFilter, setSlashFilter] = useState<string | null>(null)
@@ -80,9 +83,18 @@ export function InputBar() {
     icon: <span className="text-[11px]">✦</span>,
   }))
 
+  // Switching tabs: keep the old tab's draft and bring back the new tab's.
+  const draftTabRef = useRef(activeTabId)
   useEffect(() => {
+    const previous = draftTabRef.current
+    if (previous !== activeTabId) {
+      if (input) drafts.set(previous, input)
+      else drafts.delete(previous)
+      setInput(drafts.get(activeTabId) ?? '')
+      draftTabRef.current = activeTabId
+    }
     textareaRef.current?.focus()
-  }, [activeTabId])
+  }, [activeTabId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Focus textarea when window is shown (shortcut toggle, screenshot return)
   useEffect(() => {

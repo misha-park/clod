@@ -21,6 +21,7 @@ final class SettingsModel: ObservableObject {
     let stateURL = directory.appendingPathComponent("state.json")
 
     static let defaultPlaceholder = "Ask Claude anything…"
+    static let defaultExplainShortcut = "Command+Alt+E"
 
     // Settings (keys and defaults mirror the overlay's stores)
     @Published private(set) var themeMode = "dark"
@@ -34,6 +35,8 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var thinkingAnimation = "mitosis"
     @Published private(set) var hotkeyMode = "double-option"
     @Published private(set) var hotkeyAccelerator = ""
+    /// Shortcut that asks Claude to explain the selected text ("" = off)
+    @Published private(set) var explainShortcut = SettingsModel.defaultExplainShortcut
     @Published private(set) var openAtLogin = true
     @Published private(set) var preferredModel = "sonnet"
     @Published private(set) var permissionMode = "ask"
@@ -48,7 +51,7 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var accessibilityGranted: Bool?
     @Published private(set) var setup = SetupStatus()
     /// A newer Clod on GitHub, found by Clod's daily check
-    @Published private(set) var update: (version: String, url: URL)?
+    @Published private(set) var update: UpdateInfo?
     @Published private(set) var defaultDir = "~/Documents/clod-scratch"
     @Published private(set) var models: [ModelOption] = [
         ModelOption(id: "fable", label: "Fable"),
@@ -129,6 +132,7 @@ final class SettingsModel: ObservableObject {
         thinkingAnimation = ["claude", "tetra", "origami", "leapfrog", "mitosis"].contains(animation) ? animation : "mitosis"
         hotkeyMode = (d["hotkeyMode"] as? String) == "accelerator" ? "accelerator" : "double-option"
         hotkeyAccelerator = d["hotkeyAccelerator"] as? String ?? ""
+        explainShortcut = d["explainShortcut"] as? String ?? SettingsModel.defaultExplainShortcut
         openAtLogin = d["openAtLogin"] as? Bool ?? true
         preferredModel = d["preferredModel"] as? String ?? "sonnet"
         permissionMode = (d["permissionMode"] as? String) == "auto" ? "auto" : "ask"
@@ -145,7 +149,10 @@ final class SettingsModel: ObservableObject {
         if let s = d["setup"] as? [String: Any] { setup = SetupStatus(s) }
         if let u = d["update"] as? [String: Any], let version = u["version"] as? String,
            let link = (u["url"] as? String).flatMap(URL.init(string:)) {
-            update = (version, link)
+            update = UpdateInfo(version: version, url: link,
+                                progress: u["progress"] as? Double,
+                                downloaded: u["downloaded"] != nil,
+                                error: u["error"] as? String)
         } else {
             update = nil
         }

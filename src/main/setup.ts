@@ -19,6 +19,7 @@ import { getCliEnv, getClaudeEnv, resetCliPath } from './cli-env'
 import { clearCredential, CredentialKind, getStoredCredential, storeCredential } from './credentials'
 import { getSettings, publishState } from './settings-file'
 import { log as _log, LOG_FILE, readLogTail } from './logger'
+import { downloadUpdate } from './updates'
 
 function log(msg: string): void {
   _log('setup', msg)
@@ -394,6 +395,7 @@ async function handle(msg: Record<string, any>): Promise<void> {
       if (!PRIVACY_PANES[msg.name as Permission]) throw new Error('Unknown permission.')
       return openPrivacyPane(msg.name)
     case 'copyDebugInfo': return copyDebugInfo()
+    case 'downloadUpdate': return downloadUpdate()
     case 'uninstall':
       // Reply first; the app is gone a moment later.
       setTimeout(uninstall, 300)

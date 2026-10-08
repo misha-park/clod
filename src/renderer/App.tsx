@@ -10,6 +10,7 @@ import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useFolderDrop } from './hooks/useFolderDrop'
+import { useExplainSelection } from './hooks/useExplainSelection'
 import { ResizeHandles } from './components/ResizeHandles'
 import { SessionBrowser } from './components/history/SessionBrowser'
 import { overlaySize, windowSizeFor } from '../shared/layout'
@@ -20,6 +21,7 @@ const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
 
 export default function App() {
   useClaudeEvents()
+  useExplainSelection()
   useHealthReconciliation()
 
   const colors = useColors()

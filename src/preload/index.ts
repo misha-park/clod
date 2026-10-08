@@ -39,6 +39,8 @@ export interface ClodAPI {
   onHotkeyUsed(callback: () => void): () => void
   /** ⌘T ('new') and ⌘W ('close'), caught by the main process */
   onTabShortcut(callback: (action: 'new' | 'close') => void): () => void
+  /** The explain-selection shortcut fired: the selected text, or null and why */
+  onExplainSelection(callback: (text: string | null, reason: 'accessibility' | 'empty' | null) => void): () => void
 
   // ─── Window management ───
   hideWindow(): void
@@ -109,6 +111,11 @@ const api: ClodAPI = {
     const handler = (_e: Electron.IpcRendererEvent, isDark: boolean) => callback(isDark)
     ipcRenderer.on(IPC.THEME_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC.THEME_CHANGED, handler)
+  },
+  onExplainSelection: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, text: string | null, reason: 'accessibility' | 'empty' | null) => callback(text, reason)
+    ipcRenderer.on(IPC.EXPLAIN_SELECTION, handler)
+    return () => ipcRenderer.removeListener(IPC.EXPLAIN_SELECTION, handler)
   },
   onTabShortcut: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, action: 'new' | 'close') => callback(action)
