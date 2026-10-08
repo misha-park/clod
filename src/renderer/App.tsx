@@ -11,6 +11,7 @@ import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useFolderDrop } from './hooks/useFolderDrop'
 import { useExplainSelection, useProblemPrompts } from './hooks/useExplainSelection'
+import { listenForDemoScenes } from './demo'
 import { ResizeHandles } from './components/ResizeHandles'
 import { SessionBrowser } from './components/history/SessionBrowser'
 import { overlaySize, windowSizeFor } from '../shared/layout'
@@ -163,6 +164,8 @@ export default function App() {
   const draggingFiles = useFolderDrop()
 
   // Dev/QA snapshots (CLOD_SNAPSHOT_DIR): the main process asks the overlay to open.
+  useEffect(() => listenForDemoScenes(), [])
+
   useEffect(() => {
     const open = () => useSessionStore.setState({ isExpanded: true })
     window.addEventListener('clod-debug-expand', open)

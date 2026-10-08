@@ -340,6 +340,22 @@ function scheduleSnapshots(dir: string): void {
     writeFileSync(join(dir, name), image.toPNG())
     log(`Snapshot written: ${join(dir, name)}`)
   }
+  // CLOD_DEMO=1: capture the made-up demo scenes (src/renderer/demo.ts) for
+  // the README and download page instead of whatever is open.
+  if (process.env.CLOD_DEMO) {
+    const scene = (name: string) => mainWindow?.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('clod-demo', { detail: '${name}' }))`)
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    mainWindow?.webContents.once('did-finish-load', async () => {
+      await wait(4000)
+      for (const name of ['reply', 'permission', 'closed']) {
+        await scene(name)
+        await wait(1800)
+        await shot(`demo-${name}.png`)
+      }
+      app.quit()
+    })
+    return
+  }
   mainWindow?.webContents.once('did-finish-load', () => {
     setTimeout(async () => {
       await shot('closed.png')
@@ -1296,7 +1312,7 @@ app.whenReady().then(async () => {
   // guided setup (in the settings app) instead of prompting for permissions.
   // Users who already have it all are marked as set up without seeing it.
   await startSetupServer(() => controlPlane.restartIdleProcesses())
-  if (getSettings().setupCompleted !== true) {
+  if (getSettings().setupCompleted !== true && !process.env.CLOD_DEMO) {
     if (isSetUp()) saveSettings({ setupCompleted: true })
     else {
       saveSettings({ showSetup: true })

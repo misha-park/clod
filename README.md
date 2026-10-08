@@ -2,6 +2,12 @@
 
 A floating window for [Claude Code](https://docs.claude.com/en/docs/claude-code) on your Mac. Double-tap **⌥ Option** in any app, ask Claude something, and carry on with what you were doing. Clod runs the real Claude Code in the background, so it can read and edit files, run commands and use your Claude Code setup, all from a small overlay.
 
+<p align="center">
+  <img src="docs/img/clod-reply.png" width="720" alt="Clod open on a Mac, showing Claude's reply after sorting the Downloads folder into Documents, Images and Installers">
+</p>
+
+<p align="center"><a href="https://misha-park.github.io/clod/"><b>Download Clod</b></a> · <a href="#install">Install steps</a> · <a href="https://misha-park.github.io/clod/report.html">Report a problem</a></p>
+
 Clod works on Macs with Apple silicon (M1 or newer) running macOS 13 Ventura or later.
 
 ## What you need
