@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
         NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        // Even if macOS declines to activate us (it only lets the active app
+        // hand over focus), put the window in front so it's never hidden.
+        NSApp.windows.first?.orderFrontRegardless()
         // SwiftUI focuses (and selects) the first text field on open; clear it so
         // a stray keystroke can't overwrite the input prompt.
         DispatchQueue.main.async { NSApp.windows.first?.makeFirstResponder(nil) }

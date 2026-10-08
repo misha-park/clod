@@ -452,6 +452,10 @@ function openSettingsApp(): void {
       `The settings app is missing:\n${path}\n\nReinstall Clod with install-app.command.`)
     return
   }
+  // macOS only lets an app come to the front when the app asking is the
+  // active one. Clod's overlay deliberately doesn't activate Clod, so without
+  // this the first click on the cog opened settings behind everything else.
+  app.focus({ steal: true })
   // `open` reuses a running instance, bringing its window to the front.
   const { spawn } = require('child_process')
   spawn('/usr/bin/open', [path], { stdio: 'ignore', detached: true }).unref()
