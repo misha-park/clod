@@ -12,11 +12,12 @@
 :root{
   --paper:#f4f1ea;--ink:#1f1e1b;--soft:#5f5b52;--faint:#8c877c;--rule:#ddd7cb;
   --accent:#b95b38;--desk:#cfc8bb;--bar:rgba(244,241,234,.72);
+  --fw:#fdfcfa;--fs:#f1eee8;--fl:#e7e3db;--fz:#f6f4f0;--fsel:#e2ded6;
   --serif:"Newsreader",Georgia,"Times New Roman",serif;
   --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
 }
 @media (prefers-color-scheme: dark){
-  :root{--paper:#171614;--ink:#ecE8df;--soft:#aaa498;--faint:#7d786e;--rule:#2e2c28;--accent:#e08a66;--desk:#4a4640;--bar:rgba(23,22,20,.72)}
+  :root{--paper:#171614;--ink:#ecE8df;--soft:#aaa498;--faint:#7d786e;--rule:#2e2c28;--accent:#e08a66;--desk:#4a4640;--bar:rgba(23,22,20,.72);--fw:#26241f;--fs:#2d2a25;--fl:#36332d;--fz:#2a2823;--fsel:#3d3a33}
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -52,6 +53,24 @@ h1 em{font-style:italic;color:var(--accent);white-space:nowrap}
 .desk .hint{position:absolute;left:4%;bottom:7%;font:italic 400 20px/1.35 var(--serif);color:var(--soft);max-width:12em}
 .desk .hint b{font-style:normal;font-family:var(--sans);font-weight:600;font-size:15px;color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:1px 7px;background:var(--paper)}
 
+/* A Finder window behind Clod, showing the folders Clod just made */
+.finder{position:absolute;left:4%;top:11%;width:54%;height:58%;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;background:var(--fw);box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 16px 40px rgba(0,0,0,.18);font:12.5px/1.2 var(--sans);color:var(--ink)}
+.finder .bar{display:flex;align-items:center;gap:7px;height:38px;padding:0 13px;border-bottom:1px solid var(--fl);flex:none}
+.finder .bar i{width:11px;height:11px;border-radius:50%;background:#ff5f57}
+.finder .bar i+i{background:#febc2e}.finder .bar i+i+i{background:#28c840}
+.finder .bar span{margin-left:14px;font-weight:600;font-size:13px}
+.finder .body{display:flex;flex:1;min-height:0}
+.finder .side{width:30%;padding:10px 8px;background:var(--fs);color:var(--soft);flex:none}
+.finder .side p{margin:0 0 6px 6px;font-size:10.5px;font-weight:600;color:var(--faint)}
+.finder .side div{padding:4px 6px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.finder .side .on{background:var(--fsel);color:var(--ink)}
+.finder table{flex:1;border-collapse:collapse;align-self:flex-start;min-width:0}
+.finder th{font-weight:400;color:var(--faint);text-align:left;font-size:11px;padding:7px 10px;border-bottom:1px solid var(--fl)}
+.finder td{padding:5px 10px;white-space:nowrap;color:var(--soft)}
+.finder td:first-child{color:var(--ink)}
+.finder tr:nth-child(even) td{background:var(--fz)}
+.finder .f{display:inline-block;width:15px;height:11px;margin:0 7px -1px 0;border-radius:2px;background:#5fb2f2;box-shadow:inset 0 3px 0 #8ccbf8}
+
 /* Chapters */
 .chapter{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,6fr);gap:56px;align-items:center;padding:92px 0;border-top:1px solid var(--rule)}
 .chapter:first-of-type{border-top:0}
@@ -86,6 +105,8 @@ footer a{color:var(--soft)}
   .desk{aspect-ratio:auto;padding:46px 4% 4%}
   .desk .clod{position:static;display:block;width:100%;margin-left:auto}
   .desk .hint{display:none}
+  .desk{padding-top:34%}
+  .finder{top:42px;left:4%;width:80%;height:auto;bottom:38%}
   .top nav a:not(:first-child){display:none}
 }
 @media (max-width:520px){
@@ -98,7 +119,11 @@ footer a{color:var(--soft)}
   .get{gap:14px}
   .btn{width:100%;justify-content:center}
   .req{width:100%;text-align:center}
-  .desk{border-radius:10px;margin-top:18px;padding-top:38px}
+  .desk{border-radius:10px;margin-top:18px}
+  .finder{top:36px;font-size:11px;border-radius:8px}
+  .finder .bar{height:30px;padding:0 10px}.finder .bar i{width:9px;height:9px}
+  .finder .side{display:none}
+  .finder td,.finder th{padding:4px 8px}
   .menubar{height:26px;font-size:11.5px;gap:12px;padding:0 10px}
   .chapter,.chapter.flip,.install{padding:48px 0;gap:22px}
   h2{font-size:28px}
@@ -129,6 +154,18 @@ footer a{color:var(--soft)}
 
   <div class="desk" role="img" aria-label="Clod open in the bottom corner of a Mac desktop, showing a finished request to sort the Downloads folder">
     <div class="menubar"><span class="tray"><img src="img/tray.png" alt=""></span><span>Wed 10:42</span></div>
+    <div class="finder" aria-hidden="true">
+      <div class="bar"><i></i><i></i><i></i><span>Downloads</span></div>
+      <div class="body">
+        <div class="side"><p>Favourites</p><div>Recents</div><div>Applications</div><div>Desktop</div><div>Documents</div><div class="on">Downloads</div></div>
+        <table>
+          <tr><th>Name</th><th>Date Modified</th><th>Size</th></tr>
+          <tr><td><span class="f"></span>Documents</td><td>Today, 10:41</td><td>--</td></tr>
+          <tr><td><span class="f"></span>Images</td><td>Today, 10:41</td><td>--</td></tr>
+          <tr><td><span class="f"></span>Installers</td><td>Today, 10:41</td><td>--</td></tr>
+        </table>
+      </div>
+    </div>
     <div class="hint">Lives in the menu bar. Press <b>⌥</b> <b>⌥</b> to open it anywhere.</div>
     <img class="clod" src="img/clod-reply.png" width="733" height="460" alt="">
   </div>
