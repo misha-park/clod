@@ -437,7 +437,9 @@ export function TabStrip() {
                       endDrag()
                     }}
                   />
-                  <div className="flex items-center gap-1">{withDividers(shown)}</div>
+                  {/* Nothing here for a hidden group: an empty slot would still take
+                      the gap after the label and push the outline off-centre. */}
+                  {shown.length > 0 && <div className="flex items-center gap-1">{withDividers(shown)}</div>}
                 </motion.div>
               )
             })}
