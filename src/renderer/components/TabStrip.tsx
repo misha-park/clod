@@ -422,7 +422,11 @@ export function TabStrip() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
                   className="flex items-stretch gap-1 flex-shrink-0"
-                  style={{ border: `1px solid ${hex}66`, background: `${hex}14`, borderRadius: 9999, padding: 2 }}
+                  // Only the label showing (a hidden group): no outline, so the label
+                  // stands on its own like a tab.
+                  style={shown.length > 0
+                    ? { border: `1px solid ${hex}66`, background: `${hex}14`, borderRadius: 9999, padding: 2 }
+                    : { borderRadius: 9999 }}
                 >
                   <GroupChip
                     group={g}
