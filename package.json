@@ -1,6 +1,6 @@
 {
   "name": "clod",
-  "version": "3.6.0",
+  "version": "3.6.1",
   "description": "Clod \u2014 Command Line User Interface for Claude Code",
   "license": "MIT",
   "repository": {
