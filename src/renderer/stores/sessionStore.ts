@@ -220,6 +220,15 @@ interface State {
   /** Remove a prompt and Claude's answer to it; Claude forgets them too */
   deleteExchange: (messageId: string) => Promise<void>
   togglePin: (tabId: string) => void
+  /** The tab search (⌘K) is showing */
+  tabSearchOpen: boolean
+  setTabSearchOpen: (open: boolean) => void
+  /** Bring back the most recently closed conversation tab (⌘⇧T) */
+  reopenClosedTab: () => Promise<void>
+  /** Move a tab before/after another; it joins the other tab's group (or leaves its own) */
+  moveTab: (tabId: string, targetId: string, after: boolean) => void
+  /** Move a whole group before/after a tab outside it */
+  moveGroup: (groupId: string, targetId: string, after: boolean) => void
   /** Tab groups, in no particular order (the tabs' order places them) */
   groups: TabGroup[]
   /** A group whose name is being typed in the tab strip */
@@ -332,6 +341,7 @@ async function buildResumedTab(sessionId: string, title?: string, projectPath?: 
       hasChosenDirectory: !!projectPath,
       messages,
       lastAssistantUuid: lastAssistant?.uuid ?? null,
+      autoTitled: true,
       ...extra,
     }
   } catch {
@@ -384,9 +394,31 @@ function errorMessage(message: string, stderrTail: string[] = []): Message {
   }
 }
 
+/** Recently closed conversation tabs, newest last, for ⌘⇧T (this launch only). */
+const closedTabs: Array<{ sessionId: string; title: string; projectPath: string; groupId?: string; index: number; forkAt?: string | null }> = []
+
+/** Give a tab a short title from its first message and answer (once). */
+function autoTitle(tabId: string): void {
+  const tab = useSessionStore.getState().tabs.find((t) => t.id === tabId)
+  if (!tab || tab.autoTitled) return
+  const prompt = tab.messages.find((m) => m.role === 'user')
+  const reply = tab.messages.find((m) => m.role === 'assistant' && !m.toolName && m.content.trim())
+  if (!prompt || !reply) return
+  const before = tab.title
+  const update = (fn: (t: TabState) => Partial<TabState>) =>
+    useSessionStore.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, ...fn(t) } : t)) }))
+  update(() => ({ autoTitled: true }))
+  window.clod.suggestTitle(prompt.content, reply.content).then((title) => {
+    // Keep a title that changed in the meantime.
+    if (title) update((t) => (t.title === before ? { title } : {}))
+  }, () => {})
+}
+
 export const useSessionStore = create<State>((set, get) => ({
   tabs: [initialTab],
   groups: [], // filled in when open tabs are restored
+  tabSearchOpen: false,
+  setTabSearchOpen: (open) => set(open ? { tabSearchOpen: true, isExpanded: true } : { tabSearchOpen: false }),
   editingGroupId: null,
   activeTabId: initialTab.id,
   isExpanded: false,
@@ -614,6 +646,15 @@ export const useSessionStore = create<State>((set, get) => ({
     // Pinned tabs, and tabs in pinned groups, stay open (⌘W included) until unpinned.
     const closing = get().tabs.find((t) => t.id === tabId)
     if (closing && isTabLocked(closing, get().groups)) return
+    // Remember conversations so ⌘⇧T can bring them back.
+    if (closing?.claudeSessionId && closing.messages.length > 0) {
+      closedTabs.push({
+        sessionId: closing.claudeSessionId, title: closing.title, projectPath: closing.workingDirectory,
+        groupId: closing.groupId, index: get().tabs.indexOf(closing),
+        forkAt: closing.forkOnNextSend ? closing.lastAssistantUuid ?? null : undefined,
+      })
+      if (closedTabs.length > 25) closedTabs.shift()
+    }
     window.clod.closeTab(tabId).catch(() => {})
 
     const s = get()
@@ -663,7 +704,7 @@ export const useSessionStore = create<State>((set, get) => ({
           claudeSessionId: rewind.at ? rewind.sessionId : null,
           lastAssistantUuid: rewind.at,
           forkOnNextSend: true,
-          ...(from === 0 ? { title: 'New Tab' } : {}),
+          ...(from === 0 ? { title: 'New Tab', autoTitled: false } : {}),
         })),
       }))
       return
@@ -696,6 +737,50 @@ export const useSessionStore = create<State>((set, get) => ({
     // Pinned tabs sit first, in their existing order. A pinned tab stands on
     // its own, so pinning one takes it out of its group.
     set((s) => arrangeTabs(s.tabs.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned, groupId: t.pinned ? t.groupId : undefined } : t)), s.groups))
+  },
+
+  reopenClosedTab: async () => {
+    const last = closedTabs.pop()
+    if (!last) return
+    const tab = await buildResumedTab(last.sessionId, last.title, last.projectPath, {
+      ...(last.groupId && get().groups.some((g) => g.id === last.groupId) ? { groupId: last.groupId } : {}),
+      ...(last.forkAt !== undefined ? { forkOnNextSend: true } : {}),
+    }, last.forkAt)
+    if (!tab) return
+    set((s) => {
+      // A fresh, empty tab left behind by closing the last one gives way.
+      const tabs = s.tabs.length === 1 && s.tabs[0].messages.length === 0 && !s.tabs[0].claudeSessionId ? [] : [...s.tabs]
+      if (tabs.length === 0) window.clod.closeTab(s.tabs[0].id).catch(() => {})
+      tabs.splice(Math.min(last.index, tabs.length), 0, tab)
+      return { ...arrangeTabs(tabs, s.groups), activeTabId: tab.id }
+    })
+  },
+
+  moveTab: (tabId, targetId, after) => {
+    if (tabId === targetId) return
+    set((s) => {
+      const moving = s.tabs.find((t) => t.id === tabId)
+      const target = s.tabs.find((t) => t.id === targetId)
+      if (!moving || !target) return {}
+      const rest = s.tabs.filter((t) => t.id !== tabId)
+      const at = rest.indexOf(target) + (after ? 1 : 0)
+      // Dropped beside a grouped tab: join that group. Beside a pinned tab: become pinned.
+      const moved = { ...moving, groupId: target.groupId, pinned: !target.groupId && !!target.pinned }
+      return arrangeTabs([...rest.slice(0, at), moved, ...rest.slice(at)], s.groups)
+    })
+  },
+
+  moveGroup: (groupId, targetId, after) => {
+    set((s) => {
+      const target = s.tabs.find((t) => t.id === targetId)
+      if (!target || target.groupId === groupId) return {}
+      const members = s.tabs.filter((t) => t.groupId === groupId)
+      const rest = s.tabs.filter((t) => t.groupId !== groupId)
+      // Beside a grouped tab, go before/after that whole group.
+      const block = target.groupId ? rest.filter((t) => t.groupId === target.groupId) : [target]
+      const at = rest.indexOf(after ? block[block.length - 1] : block[0]) + (after ? 1 : 0)
+      return arrangeTabs([...rest.slice(0, at), ...members, ...rest.slice(at)], s.groups)
+    })
   },
 
   setEditingGroup: (groupId) => set({ editingGroupId: groupId }),
@@ -787,6 +872,7 @@ export const useSessionStore = create<State>((set, get) => ({
       lastAssistantUuid: src.lastAssistantUuid,
       forkOnNextSend: true,
       groupId: src.groupId,
+      autoTitled: src.autoTitled,
     }
     set((s) => {
       const tabs = [...s.tabs]
@@ -817,6 +903,7 @@ export const useSessionStore = create<State>((set, get) => ({
         claudeSessionId: rewind.at ? rewind.sessionId : null,
         lastAssistantUuid: rewind.at,
         forkOnNextSend: false,
+        ...(index === 0 ? { autoTitled: false } : {}),
       })),
     }))
     get().sendMessage(text, undefined, { rewind })
@@ -1194,6 +1281,8 @@ export const useSessionStore = create<State>((set, get) => ({
   // ─── Event handlers ───
 
   handleNormalizedEvent: (tabId, event) => {
+    // Name the tab once its first answer is in (after this event is applied).
+    if (event.type === 'task_complete') queueMicrotask(() => autoTitle(tabId))
     set((s) => {
       const { activeTabId } = s
       const tabs = s.tabs.map((tab) => {

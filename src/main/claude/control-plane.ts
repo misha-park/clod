@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
 import { RunManager } from './run-manager'
+import { suggestTitle } from './tab-title'
 import { PermissionServer, maskSensitiveFields } from '../hooks/permission-server'
 import type { HookToolRequest, PermissionOption } from '../hooks/permission-server'
 import { log as _log } from '../logger'
@@ -345,6 +346,11 @@ export class ControlPlane extends EventEmitter {
    *  - Returns existing promise for duplicate requestId (idempotency)
    *  - Queues if tab is busy, rejects if queue is full
    */
+  /** A short title for a conversation, from its first message and answer (null if that fails). */
+  suggestTitle(prompt: string, reply: string): Promise<string | null> {
+    return suggestTitle(this.runManager.binary, prompt, reply)
+  }
+
   async submitPrompt(
     tabId: string,
     requestId: string,

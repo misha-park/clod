@@ -21,6 +21,21 @@ final class SettingsModel: ObservableObject {
     let stateURL = directory.appendingPathComponent("state.json")
 
     static let defaultPlaceholder = "Ask Claude anything…"
+
+    /// Clod's in-window shortcuts (mirror APP_SHORTCUTS in src/shared/shortcuts.ts).
+    struct AppShortcut: Identifiable {
+        let id: String
+        let label: String
+        let defaultValue: String
+        let symbol: String
+    }
+    static let appShortcuts = [
+        AppShortcut(id: "newTab", label: "New tab", defaultValue: "Command+T", symbol: "plus.square"),
+        AppShortcut(id: "closeTab", label: "Close tab", defaultValue: "Command+W", symbol: "xmark.square"),
+        AppShortcut(id: "reopenTab", label: "Reopen closed tab", defaultValue: "Command+Shift+T", symbol: "arrow.uturn.backward.square"),
+        AppShortcut(id: "searchTabs", label: "Search tabs", defaultValue: "Command+K", symbol: "magnifyingglass"),
+        AppShortcut(id: "openSettings", label: "Settings", defaultValue: "Command+,", symbol: "gearshape"),
+    ]
     static let defaultExplainShortcut = "Command+Alt+E"
 
     // Settings (keys and defaults mirror the overlay's stores)
@@ -37,6 +52,8 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var hotkeyAccelerator = ""
     /// Shortcut that asks Claude to explain the selected text ("" = off)
     @Published private(set) var explainShortcut = SettingsModel.defaultExplainShortcut
+    /// Changed in-window shortcuts (id → accelerator); missing ones use their defaults
+    @Published private(set) var shortcuts: [String: String] = [:]
     @Published private(set) var openAtLogin = true
     @Published private(set) var preferredModel = "sonnet"
     @Published private(set) var permissionMode = "ask"
@@ -100,6 +117,20 @@ final class SettingsModel: ObservableObject {
         set(key, value == defaultValue ? nil : value)
     }
 
+    /// The accelerator an in-window shortcut uses now.
+    func shortcut(_ s: AppShortcut) -> String { shortcuts[s.id] ?? s.defaultValue }
+
+    /// Change an in-window shortcut; the default is stored as no entry.
+    func setShortcut(_ s: AppShortcut, _ accelerator: String) {
+        var dict = readJSON(settingsURL) ?? [:]
+        var map = dict["shortcuts"] as? [String: Any] ?? [:]
+        if accelerator == s.defaultValue { map.removeValue(forKey: s.id) } else { map[s.id] = accelerator }
+        dict["shortcuts"] = map
+        writeJSON(dict, to: settingsURL)
+        settingsMtime = modificationDate(settingsURL)
+        apply(dict)
+    }
+
     func setHotkey(mode: String, accelerator: String) {
         var dict = readJSON(settingsURL) ?? [:]
         dict["hotkeyMode"] = mode
@@ -135,6 +166,7 @@ final class SettingsModel: ObservableObject {
         hotkeyMode = (d["hotkeyMode"] as? String) == "accelerator" ? "accelerator" : "double-option"
         hotkeyAccelerator = d["hotkeyAccelerator"] as? String ?? ""
         explainShortcut = d["explainShortcut"] as? String ?? SettingsModel.defaultExplainShortcut
+        shortcuts = (d["shortcuts"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String }
         openAtLogin = d["openAtLogin"] as? Bool ?? true
         preferredModel = d["preferredModel"] as? String ?? "sonnet"
         permissionMode = (d["permissionMode"] as? String) == "auto" ? "auto" : "ask"

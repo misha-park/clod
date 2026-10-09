@@ -14,6 +14,7 @@ import { DEFAULT_EXPLAIN_SHORTCUT, registerExplainShortcut } from './explain-sel
 import { configureReports, noteProblem, problemDetected, reportProblem } from './report'
 import { describeSetup } from './setup'
 import { IPC } from '../shared/types'
+import { APP_SHORTCUTS, matchesAccelerator, resolveShortcuts } from '../shared/shortcuts'
 import { forkWithoutExchange } from './claude/transcript-edit'
 import type { RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage, MenuItemSpec } from '../shared/types'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
@@ -239,14 +240,17 @@ function createWindow(): void {
   // The panel's all-spaces/full-screen behaviour keeps it above full-screen apps.
   mainWindow.setAlwaysOnTop(true, 'floating')
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  // ⌘T / ⌘W manage tabs. Catch them here, before the standard menu can treat
-  // ⌘W as "Close Window", and let the overlay decide what they do.
+  // Clod's own shortcuts (⌘T, ⌘W, ⌘⇧T, ⌘K, ⌘, by default; changeable in
+  // Settings). Catch them here, before the standard menu can treat ⌘W as
+  // "Close Window", and let the overlay decide what they do.
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || !input.meta || input.control || input.alt || input.shift) return
-    const key = input.key.toLowerCase()
-    if (key !== 't' && key !== 'w') return
+    if (input.type !== 'keyDown' || !(input.meta || input.control || input.alt)) return
+    const shortcuts = resolveShortcuts(getSettings().shortcuts)
+    const hit = APP_SHORTCUTS.find((s) => matchesAccelerator(shortcuts[s.id], input))
+    if (!hit) return
     event.preventDefault()
-    mainWindow?.webContents.send(IPC.TAB_SHORTCUT, key === 't' ? 'new' : 'close')
+    if (hit.id === 'openSettings') openSettingsApp()
+    else mainWindow?.webContents.send(IPC.TAB_SHORTCUT, hit.id)
   })
 
   // If the overlay's process crashes, bring it back and offer to report it.
@@ -718,6 +722,13 @@ ipcMain.handle(IPC.POPUP_MENU, (_event, items: MenuItemSpec[]) => new Promise((r
     callback: () => setTimeout(() => resolve(chosen), 0),
   })
 }))
+
+ipcMain.handle(IPC.SUGGEST_TITLE, async (_event, { prompt, reply }: { prompt: string; reply: string }) => {
+  if (typeof prompt !== 'string' || typeof reply !== 'string') return null
+  const title = await controlPlane.suggestTitle(prompt, reply)
+  log(`Tab title: ${title ?? '(none)'}`)
+  return title
+})
 
 ipcMain.handle(IPC.DELETE_EXCHANGE, (_event, { sessionId, after }: { sessionId: string; after: string | null }) => {
   log(`IPC DELETE_EXCHANGE: session=${sessionId} after=${after}`)

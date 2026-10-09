@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal, PushPin } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
@@ -8,16 +8,35 @@ import { ButtonHint } from './ButtonHint'
 import { useColors, useThemeStore } from '../theme'
 import type { TabStatus, TabState, TabGroup, TabGroupColor, MenuItemSpec } from '../../shared/types'
 import { GROUP_COLORS, isTabLocked } from '../tabGroups'
+import { useShortcutLabel } from '../settings-sync'
 
 /** Group colours: muted, readable on both the light and dark themes. */
-const GROUP_HEX: Record<TabGroupColor, string> = {
+export const GROUP_HEX: Record<TabGroupColor, string> = {
   grey: '#8a8780', blue: '#6b8fc7', green: '#6fa27a', yellow: '#c4a24a',
   orange: '#d0844f', red: '#c96a5e', purple: '#9a7cc4',
 }
 const colorName = (c: TabGroupColor) => c[0].toUpperCase() + c.slice(1)
 
+/** Drag data types for moving tabs and groups within the strip. */
+const TAB_DRAG = 'application/x-clod-tab'
+const GROUP_DRAG = 'application/x-clod-group'
+
+/** The thin line between two tabs. */
+function TabDivider() {
+  const colors = useColors()
+  return <span aria-hidden className="flex-shrink-0 self-center" style={{ width: 1, height: 12, margin: '0 -2px', background: colors.textTertiary, opacity: 0.25 }} />
+}
+
 /** The group's label: click to collapse, double-click to rename, right-click for more. */
-function GroupChip({ group, count, onMenu }: { group: TabGroup; count: number; onMenu: () => void }) {
+function GroupChip({ group, count, onMenu, ...drag }: {
+  group: TabGroup
+  count: number
+  onMenu: () => void
+  onDragStart: (e: React.DragEvent) => void
+  onDragEnd: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDrop: (e: React.DragEvent) => void
+}) {
   const editing = useSessionStore((s) => s.editingGroupId === group.id)
   const setEditingGroup = useSessionStore((s) => s.setEditingGroup)
   const renameGroup = useSessionStore((s) => s.renameGroup)
@@ -35,8 +54,12 @@ function GroupChip({ group, count, onMenu }: { group: TabGroup; count: number; o
       onClick={() => { if (!editing) toggleGroupCollapsed(group.id) }}
       onDoubleClick={(e) => { e.stopPropagation(); setEditingGroup(group.id) }}
       onContextMenu={(e) => { e.preventDefault(); onMenu() }}
+      draggable={!editing}
+      {...drag}
+      // Same height as the tabs beside it (it stretches to them), so it sits
+      // evenly inside the group's outline.
       className="flex items-center gap-1.5 flex-shrink-0 cursor-pointer select-none"
-      style={{ background: hex, color: '#fff', borderRadius: 9999, padding: '3px 9px', fontSize: 11.5, fontWeight: 600, maxWidth: 140 }}
+      style={{ background: hex, color: '#fff', borderRadius: 9999, padding: '0 10px', minHeight: 26, fontSize: 11.5, fontWeight: 600, maxWidth: 140 }}
       title={group.collapsed ? 'Show this group' : 'Hide this group (double-click to rename)'}
     >
       {group.pinned && <PushPin size={9} weight="fill" className="flex-shrink-0" />}
@@ -167,6 +190,7 @@ export function TabStrip() {
   const isExpanded = useSessionStore((s) => s.isExpanded)
 
   const groups = useSessionStore((s) => s.groups)
+  const newTabShortcut = useShortcutLabel('newTab')
   const groupLabel = (g: TabGroup) => g.name || `${colorName(g.color)} group`
 
   // Right-click a tab: pin, duplicate, group or close it.
@@ -218,20 +242,45 @@ export function TabStrip() {
     else if (action === 'close') s.closeGroup(group.id)
   }
 
+  // Dragging tabs (and groups, by their label) to reorder them.
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<{ targetId: string; after: boolean } | null>(null)
+  const endDrag = () => { setDragging(null); setDropAt(null) }
+  const onDragOverTab = (e: React.DragEvent, tab: TabState) => {
+    if (!dragging || dragging === tab.id) return
+    if (dragging === `group:${tab.groupId}`) return // a group can't land inside itself
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const after = e.clientX > rect.left + rect.width / 2
+    if (dropAt?.targetId !== tab.id || dropAt.after !== after) setDropAt({ targetId: tab.id, after })
+  }
+  const onDropOnTab = (e: React.DragEvent, tab: TabState) => {
+    e.preventDefault()
+    const after = dropAt?.targetId === tab.id ? dropAt.after : false
+    const tabId = e.dataTransfer.getData(TAB_DRAG)
+    const groupId = e.dataTransfer.getData(GROUP_DRAG)
+    if (tabId) useSessionStore.getState().moveTab(tabId, tab.id, after)
+    else if (groupId) useSessionStore.getState().moveGroup(groupId, tab.id, after)
+    endDrag()
+  }
+
   // The strip in runs: a group's tabs together behind its label, other tabs on their own.
   const runs: Array<{ group: TabGroup | null; tabs: TabState[] }> = []
   for (const tab of tabs) {
     const group = (tab.groupId && groups.find((g) => g.id === tab.groupId)) || null
     const last = runs[runs.length - 1]
-    if (group && last?.group?.id === group.id) last.tabs.push(tab)
+    if (last && (group ? last.group?.id === group.id : !last.group)) last.tabs.push(tab)
     else runs.push({ group, tabs: [tab] })
   }
 
-  // ⌘T opens a tab; ⌘W closes the current one (closing the last tab leaves a fresh, empty one; pinned tabs stay).
+  // Tab shortcuts (⌘T, ⌘W, ⌘⇧T, ⌘K by default). Closing the last tab leaves a
+  // fresh, empty one; pinned tabs stay.
   useEffect(() => window.clod.onTabShortcut((action) => {
     const s = useSessionStore.getState()
-    if (action === 'new') s.createTab()
-    else s.closeTab(s.activeTabId)
+    if (action === 'newTab') s.createTab()
+    else if (action === 'closeTab') s.closeTab(s.activeTabId)
+    else if (action === 'reopenTab') s.reopenClosedTab()
+    else if (action === 'searchTabs') s.setTabSearchOpen(!s.tabSearchOpen)
   }), [])
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const setExpandedUI = useThemeStore((s) => s.setExpandedUI)
@@ -264,50 +313,69 @@ export function TabStrip() {
             {runs.map((run) => {
               const renderTab = (tab: TabState) => {
                 const isActive = tab.id === activeTabId
+                const drop = dropAt?.targetId === tab.id ? (dropAt.after ? 'after' : 'before') : null
                 return (
                   <motion.div
                     key={tab.id}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{ opacity: dragging === tab.id ? 0.4 : 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.15 }}
-                    onClick={() => selectTab(tab.id)}
-                    onContextMenu={(e) => { e.preventDefault(); openTabMenu(tab.id) }}
-                    title={tab.pinned ? 'Pinned (right-click to unpin)' : undefined}
-                    data-tab-id={tab.id}
-                    className="group flex items-center gap-2 cursor-pointer select-none flex-shrink-0 max-w-[170px] transition-all duration-150"
-                    style={{
-                      background: isActive ? colors.tabActive : 'transparent',
-                      border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
-                      borderRadius: 9999,
-                      padding: '4px 12px',
-                      fontSize: 12,
-                      color: isActive ? colors.textPrimary : colors.textTertiary,
-                      fontWeight: isActive ? 500 : 400,
-                    }}
+                    className="flex-shrink-0 max-w-[170px] min-w-0"
                   >
-                    <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
-                    <span className="truncate flex-1">{tab.title}</span>
-                    {tab.pinned && <PushPin size={10} weight="fill" className="flex-shrink-0" style={{ color: colors.textTertiary }} />}
-                    {tabs.length > 1 && !isTabLocked(tab, groups) && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
-                        className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
-                        style={{
-                          opacity: isActive ? 0.5 : 0,
-                          color: colors.textSecondary,
-                        }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isActive ? '0.5' : '0' }}
-                      >
-                        <X size={9} />
-                      </button>
-                    )}
+                    <div
+                      onClick={() => selectTab(tab.id)}
+                      onContextMenu={(e) => { e.preventDefault(); openTabMenu(tab.id) }}
+                      title={tab.pinned ? 'Pinned (right-click to unpin)' : undefined}
+                      data-tab-id={tab.id}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData(TAB_DRAG, tab.id); e.dataTransfer.effectAllowed = 'move'; setDragging(tab.id) }}
+                      onDragEnd={endDrag}
+                      onDragOver={(e) => onDragOverTab(e, tab)}
+                      onDrop={(e) => onDropOnTab(e, tab)}
+                      className="group flex items-center gap-2 cursor-pointer select-none transition-all duration-150"
+                      style={{
+                        background: isActive ? colors.tabActive : 'transparent',
+                        border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
+                        borderRadius: 9999,
+                        padding: '4px 12px',
+                        fontSize: 12,
+                        color: isActive ? colors.textPrimary : colors.textTertiary,
+                        fontWeight: isActive ? 500 : 400,
+                        // Where a dragged tab will land.
+                        boxShadow: drop === 'before' ? `inset 2px 0 0 ${colors.accent}` : drop === 'after' ? `inset -2px 0 0 ${colors.accent}` : undefined,
+                      }}
+                    >
+                      <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
+                      <span className="truncate flex-1">{tab.title}</span>
+                      {tab.pinned && <PushPin size={10} weight="fill" className="flex-shrink-0" style={{ color: colors.textTertiary }} />}
+                      {tabs.length > 1 && !isTabLocked(tab, groups) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
+                          className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
+                          style={{
+                            opacity: isActive ? 0.5 : 0,
+                            color: colors.textSecondary,
+                          }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isActive ? '0.5' : '0' }}
+                        >
+                          <X size={9} />
+                        </button>
+                      )}
+                    </div>
                   </motion.div>
                 )
               }
-              if (!run.group) return run.tabs.map(renderTab)
+              // Tabs with a thin line between them, except beside the selected tab
+              // (its highlight already sets it apart).
+              const withDividers = (list: TabState[]) => list.flatMap((tab, i) => {
+                const prev = list[i - 1]
+                const line = prev && prev.id !== activeTabId && tab.id !== activeTabId
+                return line ? [<TabDivider key={`line-${prev.id}-${tab.id}`} />, renderTab(tab)] : [renderTab(tab)]
+              })
+              if (!run.group) return withDividers(run.tabs)
               const g = run.group
               const hex = GROUP_HEX[g.color]
               // A hidden group still shows the tab you're on.
@@ -317,19 +385,32 @@ export function TabStrip() {
                   key={`group-${g.id}`}
                   layout
                   initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: dragging === `group:${g.id}` ? 0.4 : 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
-                  className="flex items-center gap-1 flex-shrink-0"
+                  className="flex items-stretch gap-1 flex-shrink-0"
                   style={{ border: `1px solid ${hex}66`, background: `${hex}14`, borderRadius: 9999, padding: 2 }}
                 >
-                  <GroupChip group={g} count={run.tabs.length} onMenu={() => openGroupMenu(g)} />
-                  {shown.map(renderTab)}
+                  <GroupChip
+                    group={g}
+                    count={run.tabs.length}
+                    onMenu={() => openGroupMenu(g)}
+                    onDragStart={(e) => { e.dataTransfer.setData(GROUP_DRAG, g.id); e.dataTransfer.effectAllowed = 'move'; setDragging(`group:${g.id}`) }}
+                    onDragEnd={endDrag}
+                    onDragOver={(e) => { if (dragging && !dragging.startsWith('group:')) { e.preventDefault(); setDropAt(null) } }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const id = e.dataTransfer.getData(TAB_DRAG)
+                      if (id) useSessionStore.getState().addToGroup(id, g.id)
+                      endDrag()
+                    }}
+                  />
+                  <div className="flex items-center gap-1">{withDividers(shown)}</div>
                 </motion.div>
               )
             })}
           </AnimatePresence>
-          <ButtonHint label="New tab (⌘T)">
+          <ButtonHint label={newTabShortcut ? `New tab (${newTabShortcut})` : 'New tab'}>
             <button
               onClick={() => createTab()}
               className="flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors"

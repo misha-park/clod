@@ -3,6 +3,9 @@
  * the main process (also edited by the native "Clod Settings" app).
  */
 
+import { create } from 'zustand'
+import { resolveShortcuts, shortcutSymbols, type AppShortcutId } from '../shared/shortcuts'
+
 type Settings = Record<string, unknown>
 
 // Loaded synchronously so the stores can initialise at module load, as they
@@ -35,4 +38,18 @@ export function persistSettings(partial: Settings): void {
 /** Called with the full settings object when the settings app changes it. */
 export function onExternalSettingsChange(cb: (settings: Settings) => void): void {
   try { window.clod.onSettingsChanged(cb) } catch {}
+}
+
+// ─── Keyboard shortcuts (for showing them in hints) ───
+
+
+const useShortcutStore = create<{ shortcuts: Record<AppShortcutId, string> }>(() => ({
+  shortcuts: resolveShortcuts(initial.settings.shortcuts),
+}))
+onExternalSettingsChange((s) => useShortcutStore.setState({ shortcuts: resolveShortcuts(s.shortcuts) }))
+
+/** A shortcut as symbols ("⌘T"), or '' when it's turned off. */
+export function useShortcutLabel(id: AppShortcutId): string {
+  const accel = useShortcutStore((s) => s.shortcuts[id])
+  return accel ? shortcutSymbols(accel) : ''
 }

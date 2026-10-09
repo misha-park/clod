@@ -134,6 +134,9 @@ export class RunManager extends EventEmitter {
     log(`Claude binary: ${this.claudeBinary}`)
   }
 
+  /** The `claude` executable runs use */
+  get binary(): string { return this.claudeBinary }
+
   private _findClaudeBinary(): string {
     const candidates = [
       join(homedir(), '.local/bin/claude'), // Claude Code's own installer

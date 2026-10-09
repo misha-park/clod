@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
+import type { AppShortcutId } from '../shared/shortcuts'
 import type { RunOptions, NormalizedEvent, HealthReport, EnrichedError, Attachment, SessionMeta, CatalogPlugin, SessionLoadMessage, MenuItemSpec } from '../shared/types'
 
 export interface ClodAPI {
@@ -23,6 +24,8 @@ export interface ClodAPI {
   deleteExchange(sessionId: string, after: string | null): Promise<string>
   /** Show a native right-click menu; resolves to the chosen item's id, or null */
   popupMenu(items: MenuItemSpec[]): Promise<string | null>
+  /** A short title for a conversation from its first message and answer */
+  suggestTitle(prompt: string, reply: string): Promise<string | null>
   resetTabSession(tabId: string): void
   listSessions(projectPath?: string): Promise<SessionMeta[]>
   loadSession(sessionId: string, projectPath?: string): Promise<SessionLoadMessage[]>
@@ -44,7 +47,7 @@ export interface ClodAPI {
   /** Fires each time the user shows or hides Clod with the keyboard shortcut */
   onHotkeyUsed(callback: () => void): () => void
   /** ⌘T ('new') and ⌘W ('close'), caught by the main process */
-  onTabShortcut(callback: (action: 'new' | 'close') => void): () => void
+  onTabShortcut(callback: (action: AppShortcutId) => void): () => void
   /** Clod noticed a problem and offers to report it */
   onProblemDetected(callback: (summary: string) => void): () => void
   /** Open the "Report a problem" choice (GitHub or email) */
@@ -101,6 +104,7 @@ const api: ClodAPI = {
   respondFolder: (questionId, path) => ipcRenderer.invoke(IPC.RESPOND_FOLDER, { questionId, path }),
   deleteExchange: (sessionId, after) => ipcRenderer.invoke(IPC.DELETE_EXCHANGE, { sessionId, after }),
   popupMenu: (items) => ipcRenderer.invoke(IPC.POPUP_MENU, items),
+  suggestTitle: (prompt, reply) => ipcRenderer.invoke(IPC.SUGGEST_TITLE, { prompt, reply }),
   respondPermission: (tabId, questionId, optionId) =>
     ipcRenderer.invoke(IPC.RESPOND_PERMISSION, { tabId, questionId, optionId }),
   resetTabSession: (tabId) => ipcRenderer.send(IPC.RESET_TAB_SESSION, tabId),
@@ -140,7 +144,7 @@ const api: ClodAPI = {
   reportProblem: (summary) => ipcRenderer.send(IPC.REPORT_PROBLEM, summary),
   rendererProblem: (summary, prompt) => ipcRenderer.send(IPC.RENDERER_PROBLEM, summary, prompt),
   onTabShortcut: (callback) => {
-    const handler = (_e: Electron.IpcRendererEvent, action: 'new' | 'close') => callback(action)
+    const handler = (_e: Electron.IpcRendererEvent, action: AppShortcutId) => callback(action)
     ipcRenderer.on(IPC.TAB_SHORTCUT, handler)
     return () => ipcRenderer.removeListener(IPC.TAB_SHORTCUT, handler)
   },

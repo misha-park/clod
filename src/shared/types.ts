@@ -182,6 +182,8 @@ export interface TabState {
   forkOnNextSend?: boolean
   /** The tab group this tab belongs to */
   groupId?: string
+  /** Whether the tab has been given a short title from its first answer (or never needs one) */
+  autoTitled?: boolean
 }
 
 /** An item of a native right-click menu (see POPUP_MENU); `id` is what a click returns */
@@ -443,6 +445,7 @@ export const IPC = {
   HOTKEY_USED: 'clod:hotkey-used',
   TAB_SHORTCUT: 'clod:tab-shortcut',
   POPUP_MENU: 'clod:popup-menu',
+  SUGGEST_TITLE: 'clod:suggest-title',
   EXPLAIN_SELECTION: 'clod:explain-selection',
   PROBLEM_DETECTED: 'clod:problem-detected',
   REPORT_PROBLEM: 'clod:report-problem',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TabStrip } from './components/TabStrip'
+import { TabSearch } from './components/TabSearch'
 import { ConversationView } from './components/ConversationView'
 import { InputBar } from './components/InputBar'
 import { AnimatedInputBorder } from './components/AnimatedInputBorder'
@@ -18,6 +19,9 @@ import { SessionBrowser } from './components/history/SessionBrowser'
 import { overlaySize, windowSizeFor } from '../shared/layout'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore } from './theme'
+
+/** Top corner radius of the Clod card: concentric with the tab pills and the button group inside it. (Was 34 expanded, 30 compact.) */
+const WINDOW_TOP_RADIUS = 22
 
 const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
 
@@ -37,6 +41,7 @@ export default function App() {
   // While the user drags a resize handle: no size animations, no click-through.
   const [resizing, setResizing] = useState(false)
   const historyOpen = useSessionStore((s) => s.historyOpen)
+  const tabSearchOpen = useSessionStore((s) => s.tabSearchOpen)
   const historyMode = useSessionStore((s) => s.historyMode)
   const drawerOpen = historyOpen && historyMode === 'drawer'
   const historyInCard = historyOpen && historyMode === 'card'
@@ -361,8 +366,9 @@ export default function App() {
               borderColor: draggingFiles ? colors.accent : colors.containerBorder,
               boxShadow: isExpanded ? colors.cardShadow : colors.cardShadowCollapsed,
               // Compact: rounded top only, square bottom. Expanded: all four rounded.
-              borderTopLeftRadius: isExpanded ? 34 : 30,
-              borderTopRightRadius: isExpanded ? 34 : 30,
+              // The top corners follow the tabs and buttons just inside them.
+              borderTopLeftRadius: WINDOW_TOP_RADIUS,
+              borderTopRightRadius: WINDOW_TOP_RADIUS,
               borderBottomLeftRadius: isExpanded ? 34 : 0,
               borderBottomRightRadius: isExpanded ? 34 : 0,
             }}
@@ -398,6 +404,7 @@ export default function App() {
             <div className="no-drag">
               <TabStrip />
             </div>
+            {tabSearchOpen && <TabSearch />}
 
             {/* Body — chat history only; the marketplace is a separate overlay above */}
             <motion.div

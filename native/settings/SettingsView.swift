@@ -3,13 +3,14 @@ import SwiftUI
 
 /// The settings pages, in sidebar order.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case start, general, appearance, claude, account, permissions, help
+    case start, general, shortcuts, appearance, claude, account, permissions, help
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .start: return "Getting started"
         case .general: return "General"
+        case .shortcuts: return "Keyboard Shortcuts"
         case .appearance: return "Appearance"
         case .claude: return "Claude"
         case .account: return "Account"
@@ -22,6 +23,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .start: return "sparkles"
         case .general: return "gearshape.fill"
+        case .shortcuts: return "keyboard.fill"
         case .appearance: return "paintpalette.fill"
         case .claude: return "bubble.left.fill"
         case .account: return "person.crop.circle.fill"
@@ -34,6 +36,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .start: return .clodAccent
         case .general: return .gray
+        case .shortcuts: return .blue
         case .appearance: return .indigo
         case .claude: return .orange
         case .account: return .pink
@@ -66,6 +69,7 @@ struct SettingsView: View {
                 switch pane {
                 case .start: startPage
                 case .general: generalPage
+                case .shortcuts: shortcutsPage
                 case .appearance: appearancePage
                 case .claude: claudePage
                 case .account: AccountSection()
@@ -113,6 +117,13 @@ struct SettingsView: View {
                 RowLabel("Notification sound", symbol: "bell.fill", color: .red)
             }
         }
+        showClodSection
+        explainSection
+    }
+
+    /// How to show Clod from anywhere (here and on Keyboard Shortcuts).
+    @ViewBuilder
+    private var showClodSection: some View {
         Section {
             Picker(selection: hotkeyModeBinding) {
                 Text("Double-tap ⌥ Option").tag("double-option")
@@ -131,10 +142,15 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Shortcut")
+            Text("Anywhere on your Mac")
         } footer: {
             Text("⌘⇧K always shows Clod too.").foregroundStyle(.secondary)
         }
+    }
+
+    /// The explain-selection shortcut (here and on Keyboard Shortcuts).
+    @ViewBuilder
+    private var explainSection: some View {
         Section {
             LabeledContent {
                 HStack {
@@ -154,6 +170,48 @@ struct SettingsView: View {
             Text("Select text in any app and press this: Clod opens and asks Claude to explain it. You don't need to copy anything first.")
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// Every shortcut in one place.
+    @ViewBuilder
+    private var shortcutsPage: some View {
+        showClodSection
+        explainSection
+        Section {
+            ForEach(SettingsModel.appShortcuts) { item in
+                LabeledContent {
+                    HStack {
+                        ShortcutRecorder(current: model.shortcut(item)) { accel in
+                            model.setShortcut(item, accel)
+                        }
+                        Button("Reset") { model.setShortcut(item, item.defaultValue) }
+                            .buttonStyle(.borderless)
+                            .disabled(model.shortcut(item) == item.defaultValue)
+                    }
+                } label: {
+                    RowLabel(item.label, symbol: item.symbol, color: .blue)
+                }
+            }
+        } header: {
+            Text("While Clod is open")
+        } footer: {
+            if let clash = shortcutClash {
+                Text("\(clash) use the same keys, so only the first one will work.").foregroundStyle(.orange)
+            } else {
+                Text("Click a shortcut, then press the keys you want to use. Press Esc to cancel.").foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Names of shortcuts that share keys, if any do.
+    private var shortcutClash: String? {
+        var all = SettingsModel.appShortcuts.map { ($0.label, model.shortcut($0)) }
+        if !model.explainShortcut.isEmpty { all.append(("Explain selected text", model.explainShortcut)) }
+        if model.hotkeyMode == "accelerator", !model.hotkeyAccelerator.isEmpty { all.append(("Show Clod", model.hotkeyAccelerator)) }
+        for (i, a) in all.enumerated() {
+            if let b = all[(i + 1)...].first(where: { $0.1 == a.1 }) { return "\(a.0) and \(b.0)" }
+        }
+        return nil
     }
 
     @ViewBuilder
