@@ -112,6 +112,8 @@ function normalizeAssistant(event: AssistantEvent): NormalizedEvent[] {
   return [{
     type: 'task_update',
     message: event.message,
+    // Subagent messages live in their own transcript; only the main thread's can be resumed at.
+    ...(event.uuid && !event.parent_tool_use_id ? { uuid: event.uuid } : {}),
   }]
 }
 

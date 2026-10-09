@@ -411,7 +411,7 @@ export class ControlPlane extends EventEmitter {
     await this.hookServerReady
 
     // Use stored session ID for resume if available and not overridden
-    if (tab.claudeSessionId && !options.sessionId) {
+    if (tab.claudeSessionId && !options.sessionId && !options.newSession) {
       options = { ...options, sessionId: tab.claudeSessionId }
     }
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
-import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, CatalogPlugin, PluginStatus } from '../../shared/types'
+import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, RunOptions, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { useThemeStore } from '../theme'
 import { explainError, looksLikeClodBug } from '../../shared/errors'
 import { describeRateLimit } from '../../shared/limits'
@@ -213,7 +213,14 @@ interface State {
   addReportPrompt: (summary: string) => void
   /** Run a `!` command in the tab's folder; its output joins the next message to Claude. */
   runShellCommand: (command: string) => Promise<void>
-  sendMessage: (prompt: string, projectPath?: string) => void
+  sendMessage: (prompt: string, projectPath?: string, opts?: { rewind?: Message['rewind'] }) => void
+  /** Replace an earlier message of yours and get a new answer from that point */
+  editMessage: (messageId: string, text: string) => void
+  /** Remove a prompt and Claude's answer to it; Claude forgets them too */
+  deleteExchange: (messageId: string) => Promise<void>
+  togglePin: (tabId: string) => void
+  /** Open a copy of a conversation; it branches off with its next message */
+  duplicateTab: (tabId: string) => Promise<void>
   respondPermission: (tabId: string, questionId: string, optionId: string) => void
   /** Answer a folder card; an allowed folder is added to the conversation */
   respondFolder: (tabId: string, path: string | null) => void
@@ -276,12 +283,19 @@ function makeLocalTab(): TabState {
 const initialTab = makeLocalTab()
 
 /** Create a main-process tab and load a saved conversation into it. */
-async function buildResumedTab(sessionId: string, title?: string, projectPath?: string): Promise<TabState | null> {
+async function buildResumedTab(sessionId: string, title?: string, projectPath?: string, extra: Partial<TabState> = {}, upTo?: string | null): Promise<TabState | null> {
   const st = useSessionStore.getState()
   const dir = projectPath || st.defaultDirOverride || st.staticInfo?.defaultDir || st.staticInfo?.homePath || '~'
   try {
     const { tabId } = await window.clod.createTab()
-    const history = await window.clod.loadSession(sessionId, dir).catch(() => [])
+    let history = await window.clod.loadSession(sessionId, dir).catch(() => [])
+    // A tab that branches off with its next message shows the conversation only up to the branch point.
+    if (upTo !== undefined) {
+      const end = upTo === null ? 0 : history.map((m) => m.uuid).lastIndexOf(upTo) + 1
+      let cut = end
+      while (cut < history.length && history[cut].role !== 'user') cut++ // keep that answer's tool steps
+      if (upTo === null || end > 0) history = history.slice(0, cut)
+    }
     const messages: Message[] = history.map((m) => ({
       id: nextMsgId(),
       role: m.role as Message['role'],
@@ -289,7 +303,9 @@ async function buildResumedTab(sessionId: string, title?: string, projectPath?: 
       toolName: m.toolName,
       toolStatus: m.toolName ? 'completed' as const : undefined,
       timestamp: m.timestamp,
+      ...(m.role === 'user' && m.rewindAt !== undefined ? { rewind: { sessionId, at: m.rewindAt } } : {}),
     }))
+    const lastAssistant = [...history].reverse().find((m) => m.uuid)
     return {
       ...makeLocalTab(),
       id: tabId,
@@ -298,6 +314,8 @@ async function buildResumedTab(sessionId: string, title?: string, projectPath?: 
       workingDirectory: dir,
       hasChosenDirectory: !!projectPath,
       messages,
+      lastAssistantUuid: lastAssistant?.uuid ?? null,
+      ...extra,
     }
   } catch {
     return null
@@ -309,7 +327,7 @@ async function buildResumedTab(sessionId: string, title?: string, projectPath?: 
 const OPEN_TABS_KEY = 'clod-open-tabs'
 
 interface SavedTabs {
-  tabs: Array<{ sessionId: string; title: string; projectPath: string }>
+  tabs: Array<{ sessionId: string; title: string; projectPath: string; pinned?: boolean; fork?: boolean; forkAt?: string | null }>
   activeSessionId: string | null
 }
 
@@ -572,6 +590,8 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   closeTab: (tabId) => {
+    // Pinned tabs stay open (⌘W included) until they're unpinned.
+    if (get().tabs.find((t) => t.id === tabId)?.pinned) return
     window.clod.closeTab(tabId).catch(() => {})
 
     const s = get()
@@ -594,6 +614,121 @@ export const useSessionStore = create<State>((set, get) => ({
     }
   },
 
+  deleteExchange: async (messageId) => {
+    const { activeTabId, tabs } = get()
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab || tab.status === 'running' || tab.status === 'connecting') return
+    const index = tab.messages.findIndex((m) => m.id === messageId)
+    if (index < 0) return
+    // The exchange: the prompt at or before this message, up to the next prompt.
+    let from = index
+    while (from >= 0 && tab.messages[from].role !== 'user') from--
+    if (from < 0) return
+    let to = from + 1
+    while (to < tab.messages.length && tab.messages[to].role !== 'user') to++
+    const rewind = tab.messages[from].rewind
+    if (!rewind) return
+
+    if (to >= tab.messages.length) {
+      // The latest exchange: go back to before it. The next message continues
+      // from there, as a copy, so the original stays in history.
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.id !== activeTabId ? t : {
+          ...t,
+          messages: t.messages.slice(0, from),
+          lastResult: null,
+          permissionDenied: null,
+          claudeSessionId: rewind.at ? rewind.sessionId : null,
+          lastAssistantUuid: rewind.at,
+          forkOnNextSend: true,
+          ...(from === 0 ? { title: 'New Tab' } : {}),
+        })),
+      }))
+      return
+    }
+
+    // An earlier exchange: continue in a copy of the conversation without it.
+    if (!tab.claudeSessionId) return
+    let newId: string
+    try {
+      newId = await window.clod.deleteExchange(tab.claudeSessionId, rewind.at)
+    } catch (err) {
+      get().addSystemMessage(`Couldn't delete that: ${(err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`)
+      return
+    }
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id !== activeTabId ? t : {
+        ...t,
+        claudeSessionId: newId,
+        messages: [
+          ...t.messages.slice(0, from),
+          // The next prompt now follows what came before the deleted one.
+          ...t.messages.slice(to).map((m, i) => (i === 0 ? { ...m, rewind: rewind.at ? { sessionId: newId, at: rewind.at } : rewind }
+            : m.rewind?.at ? { ...m, rewind: { ...m.rewind, sessionId: newId } } : m)),
+        ],
+      })),
+    }))
+  },
+
+  togglePin: (tabId) => {
+    set((s) => {
+      const tabs = s.tabs.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned } : t))
+      // Pinned tabs sit first, in their existing order.
+      return { tabs: [...tabs.filter((t) => t.pinned), ...tabs.filter((t) => !t.pinned)] }
+    })
+  },
+
+  duplicateTab: async (tabId) => {
+    const src = get().tabs.find((t) => t.id === tabId)
+    if (!src || src.status === 'running' || src.status === 'connecting') return
+    if (!src.claudeSessionId) { await get().createTab(); return }
+    const { tabId: id } = await window.clod.createTab()
+    const copy: TabState = {
+      ...makeLocalTab(),
+      id,
+      claudeSessionId: src.claudeSessionId,
+      title: src.title,
+      messages: src.messages.map((m) => ({ ...m, id: nextMsgId() })),
+      workingDirectory: src.workingDirectory,
+      hasChosenDirectory: src.hasChosenDirectory,
+      additionalDirs: src.additionalDirs,
+      lastAssistantUuid: src.lastAssistantUuid,
+      forkOnNextSend: true,
+    }
+    set((s) => {
+      const tabs = [...s.tabs]
+      const at = tabs.findIndex((t) => t.id === tabId)
+      // Beside the original, after any pinned tabs.
+      const pos = Math.max(at + 1, tabs.filter((t) => t.pinned).length)
+      tabs.splice(pos, 0, copy)
+      return { tabs, activeTabId: id }
+    })
+  },
+
+  editMessage: (messageId, text) => {
+    const { activeTabId, tabs } = get()
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab || tab.status === 'running' || tab.status === 'connecting' || !text.trim()) return
+    const index = tab.messages.findIndex((m) => m.id === messageId)
+    const rewind = tab.messages[index]?.rewind
+    if (index < 0 || !rewind) return
+    // Drop this message and everything after it, then send the new version
+    // from the point the conversation was at before it.
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id !== activeTabId ? t : {
+        ...t,
+        messages: t.messages.slice(0, index),
+        lastResult: null,
+        permissionDenied: null,
+        queuedPrompts: [],
+        claudeSessionId: rewind.at ? rewind.sessionId : null,
+        lastAssistantUuid: rewind.at,
+        forkOnNextSend: false,
+      })),
+    }))
+    get().sendMessage(text, undefined, { rewind })
+  },
+
   clearTab: () => {
     const { activeTabId } = get()
     set((s) => ({
@@ -610,7 +745,10 @@ export const useSessionStore = create<State>((set, get) => ({
     if (saved.tabs.length === 0) return false
     const restored: TabState[] = []
     for (const t of saved.tabs) {
-      const tab = await buildResumedTab(t.sessionId, t.title, t.projectPath)
+      const tab = await buildResumedTab(t.sessionId, t.title, t.projectPath, {
+        ...(t.pinned ? { pinned: true } : {}),
+        ...(t.fork ? { forkOnNextSend: true } : {}),
+      }, t.fork ? t.forkAt : undefined)
       // Skip conversations that no longer exist (e.g. removed by cleanup).
       if (tab && tab.messages.length > 0) restored.push(tab)
     }
@@ -836,7 +974,7 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
   },
 
-  sendMessage: (prompt, projectPath) => {
+  sendMessage: (prompt, projectPath, opts) => {
     const { activeTabId, tabs, staticInfo, defaultDirOverride } = get()
     const tab = tabs.find((t) => t.id === activeTabId)
     // Use explicitly chosen directory, otherwise fall back to the default folder
@@ -882,6 +1020,18 @@ export const useSessionStore = create<State>((set, get) => ({
       fullPrompt = `${tab.pendingShellOutputs.join('\n\n')}\n\n${fullPrompt}`
     }
 
+    // Where the conversation stands before this message, so it can be edited later.
+    const rewind: Message['rewind'] = opts?.rewind
+      ?? (!tab.claudeSessionId ? { sessionId: '', at: null }
+        : tab.lastAssistantUuid !== undefined ? { sessionId: tab.claudeSessionId, at: tab.lastAssistantUuid } : undefined)
+    // How to run it: from an edit point, as a branch of a duplicated tab, or as usual.
+    const branch: Partial<RunOptions> = opts?.rewind
+      ? (opts.rewind.at ? { sessionId: opts.rewind.sessionId, resumeAt: opts.rewind.at } : { sessionId: undefined, newSession: true })
+      : tab.forkOnNextSend && !isBusy
+        ? (!tab.claudeSessionId ? { sessionId: undefined, newSession: true }
+          : tab.lastAssistantUuid ? { resumeAt: tab.lastAssistantUuid } : { fork: true })
+        : {}
+
     const title = tab.messages.length === 0
       ? (prompt.length > 30 ? prompt.substring(0, 27) + '...' : prompt)
       : tab.title
@@ -917,9 +1067,10 @@ export const useSessionStore = create<State>((set, get) => ({
           title,
           attachments: [],
           pendingShellOutputs: [],
+          forkOnNextSend: false,
           messages: [
             ...withEffectiveBase.messages,
-            { id: nextMsgId(), role: 'user' as const, content: prompt, timestamp: Date.now() },
+            { id: nextMsgId(), role: 'user' as const, content: prompt, timestamp: Date.now(), ...(rewind ? { rewind } : {}) },
           ],
         }
       }),
@@ -934,6 +1085,7 @@ export const useSessionStore = create<State>((set, get) => ({
       model: preferredModel || undefined,
       addDirs: tab.additionalDirs.length > 0 ? tab.additionalDirs : undefined,
       images: inlineImages.length > 0 ? inlineImages : undefined,
+      ...branch,
     }).catch((err: Error) => {
       get().handleError(activeTabId, {
         message: err.message,
@@ -971,7 +1123,10 @@ export const useSessionStore = create<State>((set, get) => ({
               updated.queuedPrompts = rest
               updated.messages = [
                 ...updated.messages,
-                { id: nextMsgId(), role: 'user' as const, content: nextPrompt, timestamp: Date.now() },
+                {
+                  id: nextMsgId(), role: 'user' as const, content: nextPrompt, timestamp: Date.now(),
+                  ...(updated.lastAssistantUuid !== undefined ? { rewind: { sessionId: event.sessionId, at: updated.lastAssistantUuid } } : {}),
+                },
               ]
             }
             break
@@ -1030,6 +1185,7 @@ export const useSessionStore = create<State>((set, get) => ({
           }
 
           case 'task_update': {
+            if (event.uuid) updated.lastAssistantUuid = event.uuid
             // ── Text fallback ──
             // text_chunk events (from stream_event deltas) are the primary render path.
             // If they didn't arrive for this run (timing, partial stream, etc.), the
@@ -1270,7 +1426,11 @@ useSessionStore.subscribe((state) => {
   if (filmMode) return
   const tabs = state.tabs
     .filter((t) => t.claudeSessionId)
-    .map((t) => ({ sessionId: t.claudeSessionId!, title: t.title, projectPath: t.workingDirectory }))
+    .map((t) => ({
+      sessionId: t.claudeSessionId!, title: t.title, projectPath: t.workingDirectory,
+      ...(t.pinned ? { pinned: true } : {}),
+      ...(t.forkOnNextSend ? { fork: true, forkAt: t.lastAssistantUuid ?? null } : {}),
+    }))
   const active = state.tabs.find((t) => t.id === state.activeTabId)?.claudeSessionId ?? null
   const serialized = JSON.stringify({ tabs, activeSessionId: active })
   if (serialized === lastSavedTabs) return

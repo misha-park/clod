@@ -19,6 +19,10 @@ export interface ClodAPI {
   respondPermission(tabId: string, questionId: string, optionId: string): Promise<boolean>
   /** Answer a folder card: the chosen folder, or null for "not now" */
   respondFolder(questionId: string, path: string | null): Promise<boolean>
+  /** Copy a conversation without the exchange after `after`; returns the copy's session id */
+  deleteExchange(sessionId: string, after: string | null): Promise<string>
+  /** A tab's right-click menu; resolves to the chosen action, or null */
+  tabMenu(state: { pinned: boolean; canDuplicate: boolean; canClose: boolean }): Promise<'pin' | 'duplicate' | 'close' | null>
   resetTabSession(tabId: string): void
   listSessions(projectPath?: string): Promise<SessionMeta[]>
   loadSession(sessionId: string, projectPath?: string): Promise<SessionLoadMessage[]>
@@ -95,6 +99,8 @@ const api: ClodAPI = {
   takeScreenshot: () => ipcRenderer.invoke(IPC.TAKE_SCREENSHOT),
   pasteImage: (dataUrl) => ipcRenderer.invoke(IPC.PASTE_IMAGE, dataUrl),
   respondFolder: (questionId, path) => ipcRenderer.invoke(IPC.RESPOND_FOLDER, { questionId, path }),
+  deleteExchange: (sessionId, after) => ipcRenderer.invoke(IPC.DELETE_EXCHANGE, { sessionId, after }),
+  tabMenu: (state) => ipcRenderer.invoke(IPC.TAB_MENU, state),
   respondPermission: (tabId, questionId, optionId) =>
     ipcRenderer.invoke(IPC.RESPOND_PERMISSION, { tabId, questionId, optionId }),
   resetTabSession: (tabId) => ipcRenderer.send(IPC.RESET_TAB_SESSION, tabId),

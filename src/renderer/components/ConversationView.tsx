@@ -8,7 +8,7 @@ import 'katex/dist/katex.min.css'
 import {
   FileText, PencilSimple, FileArrowUp, Terminal, MagnifyingGlass, Globe,
   Robot, Question, Wrench, FolderOpen, Copy, Check, CaretRight, CaretDown,
-  SpinnerGap, ArrowCounterClockwise, Square,
+  SpinnerGap, ArrowCounterClockwise, Square, Trash,
 } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
@@ -186,9 +186,13 @@ export function ConversationView() {
 
             switch (item.kind) {
               case 'user':
-                return <UserMessage key={item.message.id} message={item.message} skipMotion={isHistorical} />
-              case 'assistant':
-                return <AssistantMessage key={item.message.id} message={item.message} skipMotion={isHistorical} />
+                return <UserMessage key={item.message.id} message={item.message} skipMotion={isHistorical} canEdit={!isRunning && !!item.message.rewind} />
+              case 'assistant': {
+                // The last answer before the next prompt can delete the whole exchange.
+                const next = grouped.slice(idx + 1).find((g) => g.kind !== 'tool-group' && g.kind !== 'system')
+                const endsExchange = (!next || next.kind === 'user') && !isRunning
+                return <AssistantMessage key={item.message.id} message={item.message} skipMotion={isHistorical} canDelete={endsExchange} />
+              }
               case 'tool-group':
                 return <ToolGroup key={`tg-${item.messages[0].id}`} tools={item.messages} skipMotion={isHistorical} />
               case 'system':
@@ -330,6 +334,33 @@ function EmptyState() {
 
 // ─── Copy Button ───
 
+/** Deletes this answer and the prompt before it (click twice: the first click asks). */
+function DeleteExchangeButton({ messageId }: { messageId: string }) {
+  const colors = useColors()
+  const deleteExchange = useSessionStore((s) => s.deleteExchange)
+  const [confirming, setConfirming] = useState(false)
+  useEffect(() => {
+    if (!confirming) return
+    const t = setTimeout(() => setConfirming(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirming])
+  return (
+    <button
+      onClick={() => { if (confirming) deleteExchange(messageId); else setConfirming(true) }}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] cursor-pointer flex-shrink-0"
+      style={{
+        background: confirming ? colors.statusErrorBg : 'transparent',
+        color: confirming ? colors.statusError : colors.textTertiary,
+        border: 'none',
+      }}
+      title="Delete this answer and your message before it. Claude forgets them too."
+    >
+      <Trash size={11} />
+      <span>{confirming ? 'Delete both?' : 'Delete'}</span>
+    </button>
+  )
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   const colors = useColors()
@@ -438,19 +469,72 @@ function InterruptButton({ tabId }: { tabId: string }) {
 
 // ─── User Message ───
 
-function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
+function UserMessage({ message, skipMotion, canEdit }: { message: Message; skipMotion?: boolean; canEdit?: boolean }) {
   const colors = useColors()
-  const content = (
-    <div
-      className="text-[13px] leading-[1.5] px-3.5 py-2 max-w-[85%] selectable-text"
-      style={{
-        background: colors.userBubble,
-        color: colors.userBubbleText,
-        border: `1px solid ${colors.userBubbleBorder}`,
-        borderRadius: '22px 22px 8px 22px',
-      }}
-    >
-      {message.content}
+  const editMessage = useSessionStore((s) => s.editMessage)
+  const [editing, setEditing] = useState<string | null>(null)
+  const boxRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    const box = boxRef.current
+    if (editing === null || !box) return
+    box.style.height = 'auto'
+    box.style.height = `${Math.min(box.scrollHeight, 200)}px`
+  }, [editing])
+  useEffect(() => {
+    if (editing !== null) { boxRef.current?.focus(); boxRef.current?.select() }
+  }, [editing !== null]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const send = () => {
+    const text = (editing ?? '').trim()
+    if (!text) return
+    setEditing(null)
+    if (text !== message.content.trim()) editMessage(message.id, text)
+  }
+
+  const bubbleStyle = {
+    background: colors.userBubble,
+    color: colors.userBubbleText,
+    border: `1px solid ${colors.userBubbleBorder}`,
+    borderRadius: '22px 22px 8px 22px',
+  }
+
+  const content = editing !== null ? (
+    <div className="flex flex-col items-end gap-1.5 w-[85%]">
+      <textarea
+        ref={boxRef}
+        value={editing}
+        onChange={(e) => setEditing(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setEditing(null) }
+        }}
+        rows={1}
+        className="w-full text-[13px] leading-[1.5] px-3.5 py-2 resize-none outline-none"
+        style={{ ...bubbleStyle, borderColor: colors.accent, borderRadius: 16 }}
+      />
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <span style={{ color: colors.textTertiary }}>Claude will answer again from here</span>
+        <button onClick={() => setEditing(null)} className="px-2 py-0.5 rounded-md" style={{ color: colors.textSecondary }}>Cancel</button>
+        <button onClick={send} className="px-2 py-0.5 rounded-md font-medium" style={{ background: colors.accent, color: '#fff' }}>Send</button>
+      </div>
+    </div>
+  ) : (
+    <div className="group/user flex items-end justify-end gap-1 max-w-[85%]">
+      {canEdit && (
+        <button
+          onClick={() => setEditing(message.content)}
+          className="opacity-0 group-hover/user:opacity-100 transition-opacity flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full mb-0.5"
+          style={{ color: colors.textTertiary }}
+          title="Edit and send again"
+          aria-label="Edit and send again"
+        >
+          <PencilSimple size={12} />
+        </button>
+      )}
+      <div className="text-[13px] leading-[1.5] px-3.5 py-2 selectable-text min-w-0" style={bubbleStyle}>
+        {message.content}
+      </div>
     </div>
   )
 
@@ -610,9 +694,11 @@ function ImageCard({ src, alt, colors }: { src?: string; alt?: string; colors: R
 const AssistantMessage = React.memo(function AssistantMessage({
   message,
   skipMotion,
+  canDelete,
 }: {
   message: Message
   skipMotion?: boolean
+  canDelete?: boolean
 }) {
   const colors = useColors()
 
@@ -644,7 +730,8 @@ const AssistantMessage = React.memo(function AssistantMessage({
       {/* Copy button — always in DOM, shown via CSS :hover (no React state needed).
           Absolute positioning so it never shifts the text layout. */}
       {message.content.trim() && (
-        <div className="absolute bottom-0 right-0 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-100">
+        <div className="absolute bottom-0 right-0 flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-100">
+          {canDelete && <DeleteExchangeButton messageId={message.id} />}
           <CopyButton text={message.content} />
         </div>
       )}
@@ -665,7 +752,8 @@ const AssistantMessage = React.memo(function AssistantMessage({
       {inner}
     </motion.div>
   )
-}, (prev, next) => prev.message.content === next.message.content && prev.skipMotion === next.skipMotion)
+}, (prev, next) => prev.message.content === next.message.content && prev.skipMotion === next.skipMotion
+  && prev.message.id === next.message.id && prev.canDelete === next.canDelete)
 
 // ─── Tool Group (collapsible timeline — Claude Code style) ───
 

@@ -193,6 +193,7 @@ export class RunManager extends EventEmitter {
       && !!proc.handle.process.stdin && !proc.handle.process.stdin.destroyed
       && proc.configKey === this._configKey(options)
       && !!options.sessionId && proc.handle.sessionId === options.sessionId
+      && !options.resumeAt && !options.newSession && !options.fork
   }
 
   /**
@@ -281,6 +282,10 @@ export class RunManager extends EventEmitter {
 
     if (options.sessionId) {
       args.push('--resume', options.sessionId)
+      // Edit and resend: carry on from an earlier message, in a copy of the
+      // conversation so the original stays in history.
+      if (options.resumeAt) args.push('--resume-session-at', options.resumeAt)
+      if (options.resumeAt || options.fork) args.push('--fork-session')
     }
     if (options.model) {
       args.push('--model', options.model)

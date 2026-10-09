@@ -174,6 +174,12 @@ export interface TabState {
   additionalDirs: string[]
   /** Claude is asking for a folder (the request_folder tool) */
   folderRequest?: { questionId: string; name: string; reason: string; matches: Array<{ path: string; name: string }> } | null
+  /** Pinned tabs sit first and can't be closed until unpinned */
+  pinned?: boolean
+  /** The last assistant message of the conversation so far (its transcript id), for edits */
+  lastAssistantUuid?: string | null
+  /** A duplicated tab: its next message branches off into a conversation of its own */
+  forkOnNextSend?: boolean
 }
 
 export interface Message {
@@ -190,6 +196,12 @@ export interface Message {
   action?: 'setup' | 'account' | 'report'
   /** For 'report': a one-line summary of what went wrong */
   detail?: string
+  /**
+   * For user messages: where the conversation stood just before this message,
+   * so it can be edited and sent again. `at` is the last assistant message's
+   * transcript id in `sessionId`, or null when this was the first message.
+   */
+  rewind?: { sessionId: string; at: string | null }
 }
 
 export interface RunResult {
@@ -208,7 +220,7 @@ export type NormalizedEvent =
   | { type: 'tool_call'; toolName: string; toolId: string; index: number }
   | { type: 'tool_call_update'; toolId: string; partialInput: string }
   | { type: 'tool_call_complete'; index: number }
-  | { type: 'task_update'; message: AssistantMessagePayload }
+  | { type: 'task_update'; message: AssistantMessagePayload; uuid?: string }
   | { type: 'task_complete'; result: string; costUsd: number; durationMs: number; numTurns: number; usage: UsageData; sessionId: string; permissionDenials?: Array<{ toolName: string; toolUseId: string }> }
   | { type: 'error'; message: string; isError: boolean; sessionId?: string }
   | { type: 'session_dead'; exitCode: number | null; signal: string | null; stderrTail: string[] }
@@ -253,6 +265,12 @@ export interface RunOptions {
   permissionMode?: 'ask' | 'auto'
   /** Images to embed inline as image content blocks in the stream-json user message. */
   images?: InlineImage[]
+  /** Edit and resend: continue `sessionId` from this message (a fork, so the original is kept) */
+  resumeAt?: string
+  /** Edit and resend of a first message: start a new conversation */
+  newSession?: boolean
+  /** Continue `sessionId` as a copy (a duplicated tab's first message) */
+  fork?: boolean
 }
 
 // ─── Control Plane Types ───
@@ -312,6 +330,10 @@ export interface SessionLoadMessage {
   content: string
   toolName?: string
   timestamp: number
+  /** Assistant messages: the transcript id */
+  uuid?: string
+  /** User messages: the last assistant transcript id before it (null = first message) */
+  rewindAt?: string | null
 }
 
 // ─── Marketplace / Plugin Types ───
@@ -351,6 +373,7 @@ export const IPC = {
   PASTE_IMAGE: 'clod:paste-image',
   RESPOND_PERMISSION: 'clod:respond-permission',
   RESPOND_FOLDER: 'clod:respond-folder',
+  DELETE_EXCHANGE: 'clod:delete-exchange',
   RESET_TAB_SESSION: 'clod:reset-tab-session',
   LIST_SESSIONS: 'clod:list-sessions',
   LOAD_SESSION: 'clod:load-session',
@@ -395,6 +418,7 @@ export const IPC = {
   SKILL_STATUS: 'clod:skill-status',
   HOTKEY_USED: 'clod:hotkey-used',
   TAB_SHORTCUT: 'clod:tab-shortcut',
+  TAB_MENU: 'clod:tab-menu',
   EXPLAIN_SELECTION: 'clod:explain-selection',
   PROBLEM_DETECTED: 'clod:problem-detected',
   REPORT_PROBLEM: 'clod:report-problem',

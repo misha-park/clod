@@ -14,7 +14,8 @@ import { DEFAULT_EXPLAIN_SHORTCUT, registerExplainShortcut } from './explain-sel
 import { configureReports, noteProblem, problemDetected, reportProblem } from './report'
 import { describeSetup } from './setup'
 import { IPC } from '../shared/types'
-import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
+import { forkWithoutExchange } from './claude/transcript-edit'
+import type { RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage } from '../shared/types'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
 import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, validPresetWidth, windowSizeFor } from '../shared/layout'
@@ -700,6 +701,26 @@ ipcMain.on(IPC.SET_PERMISSION_MODE, (_event, mode: string) => {
   controlPlane.setPermissionMode(mode)
 })
 
+ipcMain.handle(IPC.TAB_MENU, (_event, state: { pinned: boolean; canDuplicate: boolean; canClose: boolean }) => new Promise((resolve) => {
+  let chosen: string | null = null
+  const pick = (action: string) => () => { chosen = action }
+  Menu.buildFromTemplate([
+    { label: state.pinned ? 'Unpin Tab' : 'Pin Tab', click: pick('pin') },
+    { label: 'Duplicate Tab', enabled: state.canDuplicate, click: pick('duplicate') },
+    { type: 'separator' },
+    { label: 'Close Tab', enabled: state.canClose, click: pick('close') },
+  ]).popup({
+    window: mainWindow ?? undefined,
+    // The click handler runs around the time the menu closes; wait a tick for it.
+    callback: () => setTimeout(() => resolve(chosen), 0),
+  })
+}))
+
+ipcMain.handle(IPC.DELETE_EXCHANGE, (_event, { sessionId, after }: { sessionId: string; after: string | null }) => {
+  log(`IPC DELETE_EXCHANGE: session=${sessionId} after=${after}`)
+  return forkWithoutExchange(sessionId, after)
+})
+
 ipcMain.handle(IPC.RESPOND_FOLDER, (_event, { questionId, path }: { questionId: string; path: string | null }) => {
   log(`IPC RESPOND_FOLDER: question=${questionId} ${path ? 'allowed' : 'declined'}`)
   return controlPlane.respondToFolder(String(questionId), typeof path === 'string' ? path : null)
@@ -948,7 +969,9 @@ ipcMain.handle(IPC.LOAD_SESSION, async (_e, arg: { sessionId: string; projectPat
     const filePath = join(homedir(), '.claude', 'projects', encodedPath, `${sessionId}.jsonl`)
     if (!existsSync(filePath)) return []
 
-    const messages: Array<{ role: string; content: string; toolName?: string; timestamp: number }> = []
+    const messages: SessionLoadMessage[] = []
+    // The last main-thread assistant message so far: where an edit of the next prompt resumes from.
+    let lastAssistant: string | null = null
     await new Promise<void>((resolve) => {
       const rl = createInterface({ input: createReadStream(filePath) })
       rl.on('line', (line: string) => {
@@ -966,14 +989,15 @@ ipcMain.handle(IPC.LOAD_SESSION, async (_e, arg: { sessionId: string; projectPat
                 .join('\n')
             }
             if (text) {
-              messages.push({ role: 'user', content: text, timestamp: new Date(obj.timestamp).getTime() })
+              messages.push({ role: 'user', content: text, timestamp: new Date(obj.timestamp).getTime(), rewindAt: lastAssistant })
             }
           } else if (obj.type === 'assistant') {
+            if (obj.uuid && !obj.isSidechain) lastAssistant = obj.uuid
             const content = obj.message?.content
             if (Array.isArray(content)) {
               for (const block of content) {
                 if (block.type === 'text' && block.text) {
-                  messages.push({ role: 'assistant', content: block.text, timestamp: new Date(obj.timestamp).getTime() })
+                  messages.push({ role: 'assistant', content: block.text, timestamp: new Date(obj.timestamp).getTime(), uuid: obj.uuid })
                 } else if (block.type === 'tool_use' && block.name) {
                   messages.push({
                     role: 'tool',

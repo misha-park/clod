@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal } from '@phosphor-icons/react'
+import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal, PushPin } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { HistoryButton } from './history/HistoryButton'
 import { SettingsButton } from './SettingsButton'
@@ -111,7 +111,19 @@ export function TabStrip() {
   const closeTab = useSessionStore((s) => s.closeTab)
   const isExpanded = useSessionStore((s) => s.isExpanded)
 
-  // ⌘T opens a tab; ⌘W closes the current one (closing the last tab leaves a fresh, empty one).
+  // Right-click a tab: pin, duplicate or close it.
+  const openTabMenu = async (tabId: string) => {
+    const s = useSessionStore.getState()
+    const tab = s.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+    const busy = tab.status === 'running' || tab.status === 'connecting'
+    const action = await window.clod.tabMenu({ pinned: !!tab.pinned, canDuplicate: !busy, canClose: !tab.pinned })
+    if (action === 'pin') s.togglePin(tabId)
+    else if (action === 'duplicate') s.duplicateTab(tabId)
+    else if (action === 'close') s.closeTab(tabId)
+  }
+
+  // ⌘T opens a tab; ⌘W closes the current one (closing the last tab leaves a fresh, empty one; pinned tabs stay).
   useEffect(() => window.clod.onTabShortcut((action) => {
     const s = useSessionStore.getState()
     if (action === 'new') s.createTab()
@@ -156,6 +168,8 @@ export function TabStrip() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
                   onClick={() => selectTab(tab.id)}
+                  onContextMenu={(e) => { e.preventDefault(); openTabMenu(tab.id) }}
+                  title={tab.pinned ? 'Pinned (right-click to unpin)' : undefined}
                   data-tab-id={tab.id}
                   className="group flex items-center gap-2 cursor-pointer select-none flex-shrink-0 max-w-[170px] transition-all duration-150"
                   style={{
@@ -170,7 +184,8 @@ export function TabStrip() {
                 >
                   <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
                   <span className="truncate flex-1">{tab.title}</span>
-                  {tabs.length > 1 && (
+                  {tab.pinned && <PushPin size={10} weight="fill" className="flex-shrink-0" style={{ color: colors.textTertiary }} />}
+                  {tabs.length > 1 && !tab.pinned && (
                     <button
                       onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
                       className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
