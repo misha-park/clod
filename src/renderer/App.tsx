@@ -184,9 +184,12 @@ export default function App() {
     if (!window.clod?.startWindowDrag) return
 
     const onMouseDown = (e: MouseEvent) => {
+      // Left button only: a right-click (or ⌃-click) opens a menu, which swallows
+      // the mouse-up and would leave the window following the cursor.
+      if (e.button !== 0 || e.ctrlKey) return
       const el = e.target as HTMLElement
-      // Skip interactive elements — everything else on the card is draggable
-      if (el.closest('button, input, textarea, a, select, [role="button"], [contenteditable], .cm-editor, [data-resize-handle]')) return
+      // Skip interactive elements (and tabs, which drag to reorder) — everything else on the card is draggable
+      if (el.closest('button, input, textarea, a, select, [role="button"], [contenteditable], .cm-editor, [data-resize-handle], [draggable="true"]')) return
       // Message text: let the drag select it instead of moving the window.
       if (el.closest('.prose-cloud, .selectable-text, pre, code')) return
       if (!el.closest('[data-clod-ui]')) return
@@ -208,6 +211,8 @@ export default function App() {
 
     const onMouseMove = (e: MouseEvent) => {
       if (!dragRef.current) return
+      // The button was let go somewhere we didn't hear about (a menu, another window).
+      if ((e.buttons & 1) === 0) { dragRef.current = null; return }
       const dx = e.screenX - dragRef.current.startX
       const dy = e.screenY - dragRef.current.startY
       if (dx !== 0 || dy !== 0) {
@@ -254,7 +259,11 @@ export default function App() {
     document.addEventListener('mousedown', onMouseDown)
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
+    document.addEventListener('contextmenu', onMouseUp)
+    window.addEventListener('blur', onMouseUp)
     return () => {
+      document.removeEventListener('contextmenu', onMouseUp)
+      window.removeEventListener('blur', onMouseUp)
       document.removeEventListener('mousedown', onMouseDown)
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)

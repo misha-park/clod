@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal, PushPin } from '@phosphor-icons/react'
+import { Plus, X, Copy, Check, ArrowsOutLineHorizontal, Terminal, PushPin, MagnifyingGlass } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { HistoryButton } from './history/HistoryButton'
 import { SettingsButton } from './SettingsButton'
@@ -21,6 +21,9 @@ const colorName = (c: TabGroupColor) => c[0].toUpperCase() + c.slice(1)
 const TAB_DRAG = 'application/x-clod-tab'
 const GROUP_DRAG = 'application/x-clod-group'
 
+/** A tab's height (1px border + 4px padding + 18px line, twice over); the group label matches it. */
+const TAB_HEIGHT = 28
+
 /** The thin line between two tabs. */
 function TabDivider() {
   const colors = useColors()
@@ -28,9 +31,8 @@ function TabDivider() {
 }
 
 /** The group's label: click to collapse, double-click to rename, right-click for more. */
-function GroupChip({ group, count, onMenu, ...drag }: {
+function GroupChip({ group, onMenu, ...drag }: {
   group: TabGroup
-  count: number
   onMenu: () => void
   onDragStart: (e: React.DragEvent) => void
   onDragEnd: () => void
@@ -54,12 +56,13 @@ function GroupChip({ group, count, onMenu, ...drag }: {
       onClick={() => { if (!editing) toggleGroupCollapsed(group.id) }}
       onDoubleClick={(e) => { e.stopPropagation(); setEditingGroup(group.id) }}
       onContextMenu={(e) => { e.preventDefault(); onMenu() }}
+      role="button"
       draggable={!editing}
       {...drag}
       // Same height as the tabs beside it (it stretches to them), so it sits
       // evenly inside the group's outline.
       className="flex items-center gap-1.5 flex-shrink-0 cursor-pointer select-none"
-      style={{ background: hex, color: '#fff', borderRadius: 9999, padding: '0 10px', minHeight: 26, fontSize: 11.5, fontWeight: 600, maxWidth: 140 }}
+      style={{ background: hex, color: '#fff', borderRadius: 9999, padding: '0 10px', minHeight: TAB_HEIGHT, fontSize: 11.5, fontWeight: 600, maxWidth: 140 }}
       title={group.collapsed ? 'Show this group' : 'Hide this group (double-click to rename)'}
     >
       {group.pinned && <PushPin size={9} weight="fill" className="flex-shrink-0" />}
@@ -79,9 +82,8 @@ function GroupChip({ group, count, onMenu, ...drag }: {
           style={{ color: '#fff', width: Math.max(40, draft.length * 7 + 8), fontWeight: 600 }}
         />
       ) : (
-        group.name ? <span className="truncate">{group.name}</span> : (!group.collapsed && !group.pinned && <span className="w-[6px] h-[6px] rounded-full bg-white/80" />)
+        group.name ? <span className="truncate">{group.name}</span> : (!group.pinned && <span className="w-[6px] h-[6px] rounded-full bg-white/80" />)
       )}
-      {group.collapsed && !editing && <span style={{ opacity: 0.75, fontWeight: 500 }}>{count}</span>}
     </div>
   )
 }
@@ -117,6 +119,27 @@ function StatusDot({ status, hasUnread, hasPermission }: { status: TabStatus; ha
 
 /** Round icon button used in the tab bar's button group. */
 export const GROUP_BUTTON_CLASS = 'flex-shrink-0 w-[26px] h-[26px] flex items-center justify-center rounded-full transition-colors'
+
+/** Opens the tab search (same as ⌘K). */
+function SearchTabsButton() {
+  const colors = useColors()
+  const open = useSessionStore((s) => s.tabSearchOpen)
+  const shortcut = useShortcutLabel('searchTabs')
+  return (
+    <ButtonHint label={shortcut ? `Search tabs (${shortcut})` : 'Search tabs'}>
+      <button
+        // Keep focus off the button so the search box keeps it.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => useSessionStore.getState().setTabSearchOpen(!open)}
+        className={GROUP_BUTTON_CLASS}
+        style={{ color: open ? colors.accent : colors.textTertiary }}
+        aria-label="Search tabs"
+      >
+        <MagnifyingGlass size={13} />
+      </button>
+    </ButtonHint>
+  )
+}
 
 /** Opens the active tab's session in Terminal (`claude --resume`). */
 function OpenInCliButton() {
@@ -349,7 +372,17 @@ export function TabStrip() {
                     >
                       <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
                       <span className="truncate flex-1">{tab.title}</span>
-                      {tab.pinned && <PushPin size={10} weight="fill" className="flex-shrink-0" style={{ color: colors.textTertiary }} />}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); useSessionStore.getState().togglePin(tab.id) }}
+                        className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
+                        style={{ opacity: tab.pinned ? 0.75 : isActive ? 0.5 : 0, color: tab.pinned ? colors.textTertiary : colors.textSecondary }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = tab.pinned ? '0.75' : isActive ? '0.5' : '0' }}
+                        title={tab.pinned ? 'Unpin tab' : 'Pin tab'}
+                        aria-label={tab.pinned ? 'Unpin tab' : 'Pin tab'}
+                      >
+                        <PushPin size={10} weight={tab.pinned ? 'fill' : 'regular'} />
+                      </button>
                       {tabs.length > 1 && !isTabLocked(tab, groups) && (
                         <button
                           onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
@@ -393,7 +426,6 @@ export function TabStrip() {
                 >
                   <GroupChip
                     group={g}
-                    count={run.tabs.length}
                     onMenu={() => openGroupMenu(g)}
                     onDragStart={(e) => { e.dataTransfer.setData(GROUP_DRAG, g.id); e.dataTransfer.effectAllowed = 'move'; setDragging(`group:${g.id}`) }}
                     onDragEnd={endDrag}
@@ -428,6 +460,7 @@ export function TabStrip() {
         className="flex items-center flex-shrink-0 ml-1 mr-3 rounded-full"
         style={{ background: colors.controlGroupBg, padding: 2, gap: 2 }}
       >
+        <SearchTabsButton />
         <CopyConversationButton />
         <HistoryButton />
         <ButtonHint label={expandedUI ? 'Narrow view (double-click to reset size)' : 'Full width (double-click to reset size)'}>
