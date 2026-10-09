@@ -180,6 +180,30 @@ export interface TabState {
   lastAssistantUuid?: string | null
   /** A duplicated tab: its next message branches off into a conversation of its own */
   forkOnNextSend?: boolean
+  /** The tab group this tab belongs to */
+  groupId?: string
+}
+
+/** An item of a native right-click menu (see POPUP_MENU); `id` is what a click returns */
+export interface MenuItemSpec {
+  id?: string
+  label?: string
+  type?: 'separator' | 'checkbox'
+  enabled?: boolean
+  checked?: boolean
+  submenu?: MenuItemSpec[]
+}
+
+export type TabGroupColor = 'grey' | 'blue' | 'green' | 'yellow' | 'orange' | 'red' | 'purple'
+
+/** A named, coloured set of tabs that sit together in the tab strip. */
+export interface TabGroup {
+  id: string
+  name: string
+  color: TabGroupColor
+  collapsed: boolean
+  /** Pinned groups sit first, and their tabs can't be closed until the group is unpinned */
+  pinned: boolean
 }
 
 export interface Message {
@@ -418,7 +442,7 @@ export const IPC = {
   SKILL_STATUS: 'clod:skill-status',
   HOTKEY_USED: 'clod:hotkey-used',
   TAB_SHORTCUT: 'clod:tab-shortcut',
-  TAB_MENU: 'clod:tab-menu',
+  POPUP_MENU: 'clod:popup-menu',
   EXPLAIN_SELECTION: 'clod:explain-selection',
   PROBLEM_DETECTED: 'clod:problem-detected',
   REPORT_PROBLEM: 'clod:report-problem',

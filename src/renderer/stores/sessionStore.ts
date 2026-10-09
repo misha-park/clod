@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
-import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, InlineImage, RunOptions, CatalogPlugin, PluginStatus } from '../../shared/types'
+import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, TabGroup, TabGroupColor, Attachment, InlineImage, RunOptions, CatalogPlugin, PluginStatus } from '../../shared/types'
+import { arrangeTabs, isTabLocked, nextGroupColor } from '../tabGroups'
 import { useThemeStore } from '../theme'
 import { explainError, looksLikeClodBug } from '../../shared/errors'
 import { describeRateLimit } from '../../shared/limits'
@@ -219,6 +220,22 @@ interface State {
   /** Remove a prompt and Claude's answer to it; Claude forgets them too */
   deleteExchange: (messageId: string) => Promise<void>
   togglePin: (tabId: string) => void
+  /** Tab groups, in no particular order (the tabs' order places them) */
+  groups: TabGroup[]
+  /** A group whose name is being typed in the tab strip */
+  editingGroupId: string | null
+  setEditingGroup: (groupId: string | null) => void
+  /** Put a tab in a new group (and start naming it); returns the group id */
+  createGroup: (tabId: string) => string
+  addToGroup: (tabId: string, groupId: string) => void
+  removeFromGroup: (tabId: string) => void
+  renameGroup: (groupId: string, name: string) => void
+  setGroupColor: (groupId: string, color: TabGroupColor) => void
+  toggleGroupCollapsed: (groupId: string) => void
+  toggleGroupPin: (groupId: string) => void
+  ungroup: (groupId: string) => void
+  closeGroup: (groupId: string) => void
+  newTabInGroup: (groupId: string) => Promise<void>
   /** Open a copy of a conversation; it branches off with its next message */
   duplicateTab: (tabId: string) => Promise<void>
   respondPermission: (tabId: string, questionId: string, optionId: string) => void
@@ -327,8 +344,9 @@ async function buildResumedTab(sessionId: string, title?: string, projectPath?: 
 const OPEN_TABS_KEY = 'clod-open-tabs'
 
 interface SavedTabs {
-  tabs: Array<{ sessionId: string; title: string; projectPath: string; pinned?: boolean; fork?: boolean; forkAt?: string | null }>
+  tabs: Array<{ sessionId: string; title: string; projectPath: string; pinned?: boolean; fork?: boolean; forkAt?: string | null; groupId?: string }>
   activeSessionId: string | null
+  groups: TabGroup[]
 }
 
 function loadSavedTabs(): SavedTabs {
@@ -336,9 +354,10 @@ function loadSavedTabs(): SavedTabs {
     const p = JSON.parse(localStorage.getItem(OPEN_TABS_KEY) || '{}')
     const tabs = Array.isArray(p.tabs) ? p.tabs.filter((t: any) =>
       typeof t?.sessionId === 'string' && typeof t?.projectPath === 'string') : []
-    return { tabs, activeSessionId: typeof p.activeSessionId === 'string' ? p.activeSessionId : null }
+    const groups = Array.isArray(p.groups) ? p.groups.filter((g: any) => typeof g?.id === 'string' && typeof g?.name === 'string') : []
+    return { tabs, activeSessionId: typeof p.activeSessionId === 'string' ? p.activeSessionId : null, groups }
   } catch {
-    return { tabs: [], activeSessionId: null }
+    return { tabs: [], activeSessionId: null, groups: [] }
   }
 }
 
@@ -367,6 +386,8 @@ function errorMessage(message: string, stderrTail: string[] = []): Message {
 
 export const useSessionStore = create<State>((set, get) => ({
   tabs: [initialTab],
+  groups: [], // filled in when open tabs are restored
+  editingGroupId: null,
   activeTabId: initialTab.id,
   isExpanded: false,
   historyOpen: false,
@@ -590,8 +611,9 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   closeTab: (tabId) => {
-    // Pinned tabs stay open (⌘W included) until they're unpinned.
-    if (get().tabs.find((t) => t.id === tabId)?.pinned) return
+    // Pinned tabs, and tabs in pinned groups, stay open (⌘W included) until unpinned.
+    const closing = get().tabs.find((t) => t.id === tabId)
+    if (closing && isTabLocked(closing, get().groups)) return
     window.clod.closeTab(tabId).catch(() => {})
 
     const s = get()
@@ -608,9 +630,9 @@ export const useSessionStore = create<State>((set, get) => ({
       }
       const closedIndex = s.tabs.findIndex((t) => t.id === tabId)
       const newActive = remaining[Math.min(closedIndex, remaining.length - 1)]
-      set({ tabs: remaining, activeTabId: newActive.id })
+      set({ ...arrangeTabs(remaining, s.groups), activeTabId: newActive.id })
     } else {
-      set({ tabs: remaining })
+      set(arrangeTabs(remaining, s.groups))
     }
   },
 
@@ -671,11 +693,81 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   togglePin: (tabId) => {
+    // Pinned tabs sit first, in their existing order. A pinned tab stands on
+    // its own, so pinning one takes it out of its group.
+    set((s) => arrangeTabs(s.tabs.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned, groupId: t.pinned ? t.groupId : undefined } : t)), s.groups))
+  },
+
+  setEditingGroup: (groupId) => set({ editingGroupId: groupId }),
+
+  createGroup: (tabId) => {
+    const id = crypto.randomUUID()
     set((s) => {
-      const tabs = s.tabs.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned } : t))
-      // Pinned tabs sit first, in their existing order.
-      return { tabs: [...tabs.filter((t) => t.pinned), ...tabs.filter((t) => !t.pinned)] }
+      const group: TabGroup = { id, name: '', color: nextGroupColor(s.groups), collapsed: false, pinned: false }
+      const tabs = s.tabs.map((t) => (t.id === tabId ? { ...t, groupId: id, pinned: false } : t))
+      return { ...arrangeTabs(tabs, [...s.groups, group]), editingGroupId: id }
     })
+    return id
+  },
+
+  addToGroup: (tabId, groupId) => {
+    set((s) => {
+      // Join at the end of the group.
+      const moving = s.tabs.find((t) => t.id === tabId)
+      if (!moving) return {}
+      const rest = s.tabs.filter((t) => t.id !== tabId)
+      const lastIndex = rest.map((t) => t.groupId).lastIndexOf(groupId)
+      const tabs = [...rest.slice(0, lastIndex + 1), { ...moving, groupId, pinned: false }, ...rest.slice(lastIndex + 1)]
+      return arrangeTabs(tabs, s.groups)
+    })
+  },
+
+  removeFromGroup: (tabId) => {
+    set((s) => {
+      // Leave the group from its end, so the group stays together.
+      const moving = s.tabs.find((t) => t.id === tabId)
+      if (!moving?.groupId) return {}
+      const rest = s.tabs.filter((t) => t.id !== tabId)
+      const lastIndex = rest.map((t) => t.groupId).lastIndexOf(moving.groupId)
+      const at = lastIndex >= 0 ? lastIndex + 1 : s.tabs.indexOf(moving)
+      const tabs = [...rest.slice(0, at), { ...moving, groupId: undefined }, ...rest.slice(at)]
+      return arrangeTabs(tabs, s.groups)
+    })
+  },
+
+  renameGroup: (groupId, name) => set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, name: name.trim().slice(0, 40) } : g)) })),
+
+  setGroupColor: (groupId, color) => set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, color } : g)) })),
+
+  toggleGroupCollapsed: (groupId) => {
+    set((s) => {
+      const groups = s.groups.map((g) => (g.id === groupId ? { ...g, collapsed: !g.collapsed } : g))
+      // Collapsing the group you're in moves you to the nearest tab outside it, if there is one.
+      const active = s.tabs.find((t) => t.id === s.activeTabId)
+      if (!groups.find((g) => g.id === groupId)?.collapsed || active?.groupId !== groupId) return { groups }
+      const i = s.tabs.indexOf(active)
+      const outside = [...s.tabs.slice(i + 1), ...s.tabs.slice(0, i).reverse()].find((t) => t.groupId !== groupId)
+      return outside ? { groups, activeTabId: outside.id } : { groups }
+    })
+  },
+
+  toggleGroupPin: (groupId) => {
+    set((s) => arrangeTabs(s.tabs, s.groups.map((g) => (g.id === groupId ? { ...g, pinned: !g.pinned } : g))))
+  },
+
+  ungroup: (groupId) => {
+    set((s) => arrangeTabs(s.tabs.map((t) => (t.groupId === groupId ? { ...t, groupId: undefined } : t)), s.groups))
+  },
+
+  closeGroup: (groupId) => {
+    if (get().groups.find((g) => g.id === groupId)?.pinned) return
+    for (const t of get().tabs.filter((x) => x.groupId === groupId)) get().closeTab(t.id)
+  },
+
+  newTabInGroup: async (groupId) => {
+    const id = await get().createTab()
+    get().addToGroup(id, groupId)
+    set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, collapsed: false } : g)) }))
   },
 
   duplicateTab: async (tabId) => {
@@ -694,6 +786,7 @@ export const useSessionStore = create<State>((set, get) => ({
       additionalDirs: src.additionalDirs,
       lastAssistantUuid: src.lastAssistantUuid,
       forkOnNextSend: true,
+      groupId: src.groupId,
     }
     set((s) => {
       const tabs = [...s.tabs]
@@ -701,7 +794,7 @@ export const useSessionStore = create<State>((set, get) => ({
       // Beside the original, after any pinned tabs.
       const pos = Math.max(at + 1, tabs.filter((t) => t.pinned).length)
       tabs.splice(pos, 0, copy)
-      return { tabs, activeTabId: id }
+      return { ...arrangeTabs(tabs, s.groups), activeTabId: id }
     })
   },
 
@@ -748,13 +841,14 @@ export const useSessionStore = create<State>((set, get) => ({
       const tab = await buildResumedTab(t.sessionId, t.title, t.projectPath, {
         ...(t.pinned ? { pinned: true } : {}),
         ...(t.fork ? { forkOnNextSend: true } : {}),
+        ...(t.groupId ? { groupId: t.groupId } : {}),
       }, t.fork ? t.forkAt : undefined)
       // Skip conversations that no longer exist (e.g. removed by cleanup).
       if (tab && tab.messages.length > 0) restored.push(tab)
     }
     if (restored.length === 0) return false
     const active = restored.find((t) => t.claudeSessionId === saved.activeSessionId) || restored[restored.length - 1]
-    set({ tabs: restored, activeTabId: active.id })
+    set({ ...arrangeTabs(restored, saved.groups), activeTabId: active.id })
     return true
   },
 
@@ -1430,9 +1524,11 @@ useSessionStore.subscribe((state) => {
       sessionId: t.claudeSessionId!, title: t.title, projectPath: t.workingDirectory,
       ...(t.pinned ? { pinned: true } : {}),
       ...(t.forkOnNextSend ? { fork: true, forkAt: t.lastAssistantUuid ?? null } : {}),
+      ...(t.groupId ? { groupId: t.groupId } : {}),
     }))
   const active = state.tabs.find((t) => t.id === state.activeTabId)?.claudeSessionId ?? null
-  const serialized = JSON.stringify({ tabs, activeSessionId: active })
+  const groups = state.groups.filter((g) => tabs.some((t) => t.groupId === g.id))
+  const serialized = JSON.stringify({ tabs, activeSessionId: active, groups })
   if (serialized === lastSavedTabs) return
   lastSavedTabs = serialized
   try { localStorage.setItem(OPEN_TABS_KEY, serialized) } catch {}

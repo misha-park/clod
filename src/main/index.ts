@@ -15,7 +15,7 @@ import { configureReports, noteProblem, problemDetected, reportProblem } from '.
 import { describeSetup } from './setup'
 import { IPC } from '../shared/types'
 import { forkWithoutExchange } from './claude/transcript-edit'
-import type { RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage } from '../shared/types'
+import type { RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage, MenuItemSpec } from '../shared/types'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
 import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, validPresetWidth, windowSizeFor } from '../shared/layout'
@@ -701,15 +701,18 @@ ipcMain.on(IPC.SET_PERMISSION_MODE, (_event, mode: string) => {
   controlPlane.setPermissionMode(mode)
 })
 
-ipcMain.handle(IPC.TAB_MENU, (_event, state: { pinned: boolean; canDuplicate: boolean; canClose: boolean }) => new Promise((resolve) => {
+ipcMain.handle(IPC.POPUP_MENU, (_event, items: MenuItemSpec[]) => new Promise((resolve) => {
   let chosen: string | null = null
-  const pick = (action: string) => () => { chosen = action }
-  Menu.buildFromTemplate([
-    { label: state.pinned ? 'Unpin Tab' : 'Pin Tab', click: pick('pin') },
-    { label: 'Duplicate Tab', enabled: state.canDuplicate, click: pick('duplicate') },
-    { type: 'separator' },
-    { label: 'Close Tab', enabled: state.canClose, click: pick('close') },
-  ]).popup({
+  const build = (list: MenuItemSpec[]): Electron.MenuItemConstructorOptions[] => list.map((i) => (
+    i.type === 'separator' ? { type: 'separator' as const } : {
+      label: i.label,
+      type: i.type,
+      enabled: i.enabled !== false,
+      checked: i.checked,
+      ...(i.submenu ? { submenu: build(i.submenu) } : { click: () => { chosen = i.id ?? null } }),
+    }
+  ))
+  Menu.buildFromTemplate(build(items)).popup({
     window: mainWindow ?? undefined,
     // The click handler runs around the time the menu closes; wait a tick for it.
     callback: () => setTimeout(() => resolve(chosen), 0),

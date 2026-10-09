@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
-import type { RunOptions, NormalizedEvent, HealthReport, EnrichedError, Attachment, SessionMeta, CatalogPlugin, SessionLoadMessage } from '../shared/types'
+import type { RunOptions, NormalizedEvent, HealthReport, EnrichedError, Attachment, SessionMeta, CatalogPlugin, SessionLoadMessage, MenuItemSpec } from '../shared/types'
 
 export interface ClodAPI {
   // ─── Request-response (renderer → main) ───
@@ -21,8 +21,8 @@ export interface ClodAPI {
   respondFolder(questionId: string, path: string | null): Promise<boolean>
   /** Copy a conversation without the exchange after `after`; returns the copy's session id */
   deleteExchange(sessionId: string, after: string | null): Promise<string>
-  /** A tab's right-click menu; resolves to the chosen action, or null */
-  tabMenu(state: { pinned: boolean; canDuplicate: boolean; canClose: boolean }): Promise<'pin' | 'duplicate' | 'close' | null>
+  /** Show a native right-click menu; resolves to the chosen item's id, or null */
+  popupMenu(items: MenuItemSpec[]): Promise<string | null>
   resetTabSession(tabId: string): void
   listSessions(projectPath?: string): Promise<SessionMeta[]>
   loadSession(sessionId: string, projectPath?: string): Promise<SessionLoadMessage[]>
@@ -100,7 +100,7 @@ const api: ClodAPI = {
   pasteImage: (dataUrl) => ipcRenderer.invoke(IPC.PASTE_IMAGE, dataUrl),
   respondFolder: (questionId, path) => ipcRenderer.invoke(IPC.RESPOND_FOLDER, { questionId, path }),
   deleteExchange: (sessionId, after) => ipcRenderer.invoke(IPC.DELETE_EXCHANGE, { sessionId, after }),
-  tabMenu: (state) => ipcRenderer.invoke(IPC.TAB_MENU, state),
+  popupMenu: (items) => ipcRenderer.invoke(IPC.POPUP_MENU, items),
   respondPermission: (tabId, questionId, optionId) =>
     ipcRenderer.invoke(IPC.RESPOND_PERMISSION, { tabId, questionId, optionId }),
   resetTabSession: (tabId) => ipcRenderer.send(IPC.RESET_TAB_SESSION, tabId),
