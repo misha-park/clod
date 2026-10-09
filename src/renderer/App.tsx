@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TabStrip } from './components/TabStrip'
 import { TabSearch } from './components/TabSearch'
+import { GroupNoteEditor } from './components/GroupNoteEditor'
 import { ConversationView } from './components/ConversationView'
 import { InputBar } from './components/InputBar'
 import { AnimatedInputBorder } from './components/AnimatedInputBorder'
@@ -42,6 +43,7 @@ export default function App() {
   const [resizing, setResizing] = useState(false)
   const historyOpen = useSessionStore((s) => s.historyOpen)
   const tabSearchOpen = useSessionStore((s) => s.tabSearchOpen)
+  const noteEditorOpen = useSessionStore((s) => !!s.noteEditorGroupId)
   const historyMode = useSessionStore((s) => s.historyMode)
   const drawerOpen = historyOpen && historyMode === 'drawer'
   const historyInCard = historyOpen && historyMode === 'card'
@@ -414,6 +416,7 @@ export default function App() {
               <TabStrip />
             </div>
             {tabSearchOpen && <TabSearch />}
+            {noteEditorOpen && <GroupNoteEditor />}
 
             {/* Body — chat history only; the marketplace is a separate overlay above */}
             <motion.div

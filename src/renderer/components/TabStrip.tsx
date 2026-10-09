@@ -49,6 +49,9 @@ function GroupChip({ group, onMenu, ...drag }: {
   const finish = (save: boolean) => {
     if (save) renameGroup(group.id, draft)
     setEditingGroup(null)
+    // A new group: once it's named, ask what the group is for.
+    const s = useSessionStore.getState()
+    if (s.groupNotePromptId === group.id) s.setNoteEditor(group.id)
   }
 
   return (
@@ -63,7 +66,7 @@ function GroupChip({ group, onMenu, ...drag }: {
       // evenly inside the group's outline.
       className="flex items-center gap-1.5 flex-shrink-0 cursor-pointer select-none"
       style={{ background: hex, color: '#fff', borderRadius: 9999, padding: '0 10px', minHeight: TAB_HEIGHT, fontSize: 11.5, fontWeight: 600, maxWidth: 140 }}
-      title={group.collapsed ? 'Show this group' : 'Hide this group (double-click to rename)'}
+      title={(group.collapsed ? 'Show this group' : 'Hide this group (double-click to rename)') + (group.note ? `\n\nGroup note: ${group.note}` : '')}
     >
       {group.pinned && <PushPin size={9} weight="fill" className="flex-shrink-0" />}
       {editing ? (
@@ -247,6 +250,7 @@ export function TabStrip() {
     const s = useSessionStore.getState()
     const action = await window.clod.popupMenu([
       { id: 'rename', label: 'Rename Group' },
+      { id: 'note', label: group.note ? 'Edit Group Note…' : 'Add Group Note…' },
       { label: 'Colour', submenu: GROUP_COLORS.map((c) => ({ id: `color:${c}`, label: colorName(c), type: 'checkbox' as const, checked: group.color === c })) },
       { id: 'pin', label: group.pinned ? 'Unpin Group' : 'Pin Group' },
       { type: 'separator' },
@@ -257,6 +261,7 @@ export function TabStrip() {
       { id: 'close', label: 'Close Group', enabled: !group.pinned },
     ])
     if (action === 'rename') s.setEditingGroup(group.id)
+    else if (action === 'note') s.setNoteEditor(group.id)
     else if (action?.startsWith('color:')) s.setGroupColor(group.id, action.slice(6) as TabGroupColor)
     else if (action === 'pin') s.toggleGroupPin(group.id)
     else if (action === 'new-tab') s.newTabInGroup(group.id)

@@ -25,7 +25,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { log as _log } from '../logger'
-import { existingFolder, FOLDER_MCP_SCRIPT, FOLDER_TOOL_NAME, foldersFor, type FolderMatch } from './folder-tool'
+import { CLOD_TOOL_NAMES, existingFolder, FOLDER_MCP_SCRIPT, foldersFor, GROUP_TOOLS, type FolderMatch, type GroupToolName } from './folder-tool'
 const PERMISSION_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 const DEFAULT_PORT = 19836
 const MAX_BODY_SIZE = 1024 * 1024 // 1MB
@@ -246,6 +246,8 @@ export class PermissionServer extends EventEmitter {
   private settingsFiles = new Map<string, string>()
 
   /** Folder requests waiting for the user: questionId → answer callback */
+  /** Group tool calls waiting for the overlay: questionId → answer callback */
+  private pendingGroupTools = new Map<string, { runToken: string; timeout: ReturnType<typeof setTimeout>; resolve: (answer: { text: string; isError?: boolean }) => void }>()
   private pendingFolders = new Map<string, { runToken: string; timeout: ReturnType<typeof setTimeout>; resolve: (answer: { path: string | null; message?: string }) => void }>()
 
   /** Tracked MCP config files for the folder tool: runToken → filePath */
@@ -297,6 +299,11 @@ export class PermissionServer extends EventEmitter {
       clearTimeout(pending.timeout)
       pending.resolve({ path: null, message: 'Clod is closing.' })
       this.pendingFolders.delete(qid)
+    }
+    for (const [qid, pending] of this.pendingGroupTools) {
+      clearTimeout(pending.timeout)
+      pending.resolve({ text: 'Clod is closing.', isError: true })
+      this.pendingGroupTools.delete(qid)
     }
 
     // Clean up all remaining settings files (best-effort)
@@ -351,6 +358,13 @@ export class PermissionServer extends EventEmitter {
         clearTimeout(pending.timeout)
         pending.resolve({ path: null, message: 'The conversation ended.' })
         this.pendingFolders.delete(qid)
+      }
+    }
+    for (const [qid, pending] of this.pendingGroupTools) {
+      if (pending.runToken === runToken) {
+        clearTimeout(pending.timeout)
+        pending.resolve({ text: 'The conversation ended.', isError: true })
+        this.pendingGroupTools.delete(qid)
       }
     }
 
@@ -500,6 +514,7 @@ export class PermissionServer extends EventEmitter {
           env: {
             ELECTRON_RUN_AS_NODE: '1',
             CLOD_FOLDER_URL: `http://127.0.0.1:${port}/folder/request/${this.appSecret}/${runToken}`,
+            CLOD_GROUP_URL: `http://127.0.0.1:${port}/group/tool/${this.appSecret}/${runToken}`,
           },
         },
       },
@@ -522,6 +537,43 @@ export class PermissionServer extends EventEmitter {
       ? { path: folder, message: 'It has been added to this conversation.' }
       : { path: null, message: 'The user chose not to share a folder. Ask them which folder they meant, or carry on without it.' })
     return true
+  }
+
+  /** The overlay's answer to a group tool call. */
+  respondToGroupTool(questionId: string, answer: { text: string; isError?: boolean }): boolean {
+    const pending = this.pendingGroupTools.get(questionId)
+    if (!pending) return false
+    clearTimeout(pending.timeout)
+    this.pendingGroupTools.delete(questionId)
+    pending.resolve({ text: String(answer.text ?? '').slice(0, 200_000), isError: !!answer.isError })
+    return true
+  }
+
+  private async _handleGroupTool(segments: string[], req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const reply = (status: number, body: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
+    const registration = segments[2] === this.appSecret ? this.runTokens.get(segments[3]) : undefined
+    if (!registration) return reply(403, { text: 'Not allowed.', isError: true })
+    let body = ''
+    for await (const chunk of req) {
+      body += chunk
+      if (body.length > 256 * 1024) return reply(413, { text: 'Request too large.', isError: true })
+    }
+    let request: { tool?: unknown; args?: unknown }
+    try { request = JSON.parse(body || '{}') } catch { return reply(400, { text: 'Invalid request.', isError: true }) }
+    const tool = GROUP_TOOLS.find((t) => t === request.tool) as GroupToolName | undefined
+    if (!tool) return reply(400, { text: 'Unknown tool.', isError: true })
+    const args = request.args && typeof request.args === 'object' ? request.args as Record<string, unknown> : {}
+    const questionId = `group-${randomUUID()}`
+    log(`Group tool ${tool} → tab=${registration.tabId.substring(0, 8)}…`)
+    const answer = await new Promise<{ text: string; isError?: boolean }>((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingGroupTools.delete(questionId)
+        resolve({ text: 'Clod did not answer.', isError: true })
+      }, 15_000)
+      this.pendingGroupTools.set(questionId, { runToken: segments[3], timeout, resolve })
+      this.emit('group-tool', questionId, registration.tabId, tool, args)
+    })
+    reply(200, answer)
   }
 
   private async _handleFolderRequest(segments: string[], req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -569,6 +621,9 @@ export class PermissionServer extends EventEmitter {
     const segments = (req.url || '').split('/').filter(Boolean)
     if (segments.length === 4 && segments[0] === 'folder' && segments[1] === 'request') {
       return this._handleFolderRequest(segments, req, res)
+    }
+    if (segments.length === 4 && segments[0] === 'group' && segments[1] === 'tool') {
+      return this._handleGroupTool(segments, req, res)
     }
     if (segments.length !== 4 || segments[0] !== 'hook' || segments[1] !== 'pre-tool-use') {
       res.writeHead(404, { 'Content-Type': 'application/json' })
@@ -647,8 +702,8 @@ export class PermissionServer extends EventEmitter {
     const sessionId = toolRequest.session_id
     const toolName = toolRequest.tool_name
 
-    // The folder tool asks the user itself (its own card), so let it through.
-    if (toolName === FOLDER_TOOL_NAME) {
+    // Clod's own tools (folder card, tab group) handle themselves, so let them through.
+    if (CLOD_TOOL_NAMES.includes(toolName)) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(allowResponse('Clod asks the user in its folder card')))
       return

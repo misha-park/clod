@@ -15,6 +15,17 @@ import { basename, isAbsolute, join, resolve } from 'path'
 
 export const FOLDER_TOOL_NAME = 'mcp__clod__request_folder'
 
+/**
+ * Tools for chats in a tab group: see the group's other conversations and
+ * update its shared note. Clod's overlay answers them (it holds the tabs).
+ */
+export const GROUP_TOOLS = ['list_group_chats', 'read_group_chat', 'update_group_note'] as const
+export type GroupToolName = typeof GROUP_TOOLS[number]
+export const GROUP_TOOL_NAMES = GROUP_TOOLS.map((t) => `mcp__clod__${t}`)
+
+/** Tools Clod answers itself, so its permission hook lets them straight through. */
+export const CLOD_TOOL_NAMES = [FOLDER_TOOL_NAME, ...GROUP_TOOL_NAMES]
+
 /** Folders a request can offer, best match first. */
 export interface FolderMatch {
   path: string
@@ -75,8 +86,9 @@ export async function foldersFor(request: { name?: string; path?: string }): Pro
  */
 export const FOLDER_MCP_SCRIPT = String.raw`
 const http = require('http')
-const URL_ = process.env.CLOD_FOLDER_URL
-const tool = {
+const FOLDER_URL = process.env.CLOD_FOLDER_URL
+const GROUP_URL = process.env.CLOD_GROUP_URL
+const folderTool = {
   name: 'request_folder',
   description: 'Ask the user to let you work in a folder. Use this whenever the user mentions a folder by name ' +
     '(for example "my tax folder") or you need a folder outside your working folder. Clod finds matching folders ' +
@@ -92,18 +104,50 @@ const tool = {
     required: ['reason'],
   },
 }
+const groupTools = [
+  {
+    name: 'list_group_chats',
+    description: 'List the other chats in this chat\'s Clod tab group: their titles and how far along they are. ' +
+      'Use this when the user mentions another chat, tab or thread in the group, before reading one.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'read_group_chat',
+    description: 'Read another chat in this chat\'s Clod tab group (what the user and Claude said there). ' +
+      'Use it when the user refers to work done in another tab of the group.',
+    inputSchema: {
+      type: 'object',
+      properties: { chat: { type: 'string', description: 'The chat\'s number from list_group_chats, or (part of) its title.' } },
+      required: ['chat'],
+    },
+  },
+  {
+    name: 'update_group_note',
+    description: 'Change the note shared by every chat in this chat\'s Clod tab group. Only use it when the user asks ' +
+      'you to remember, note or change something for the group. Keep the note short: facts and preferences, not a transcript.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        note: { type: 'string', description: 'The text to add, or the whole new note when replacing.' },
+        mode: { type: 'string', enum: ['append', 'replace'], description: 'append (default) adds to the note; replace rewrites it.' },
+      },
+      required: ['note'],
+    },
+  },
+]
+const tools = GROUP_URL ? [folderTool, ...groupTools] : [folderTool]
 const send = (msg) => process.stdout.write(JSON.stringify(msg) + '\n')
-function ask(args) {
+function post(url, args, fallback) {
   return new Promise((resolve) => {
     const body = JSON.stringify(args || {})
-    const u = new URL(URL_)
+    const u = new URL(url)
     const req = http.request({ hostname: u.hostname, port: u.port, path: u.pathname, method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (res) => {
       let data = ''
       res.on('data', (c) => { data += c })
-      res.on('end', () => { try { resolve(JSON.parse(data)) } catch { resolve({ path: null, message: 'Clod did not answer.' }) } })
+      res.on('end', () => { try { resolve(JSON.parse(data)) } catch { resolve(fallback('Clod did not answer.')) } })
     })
-    req.on('error', () => resolve({ path: null, message: 'Clod is not reachable.' }))
+    req.on('error', () => resolve(fallback('Clod is not reachable.')))
     req.end(body)
   })
 }
@@ -122,9 +166,16 @@ process.stdin.on('data', async (chunk) => {
       send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-06-18',
         capabilities: { tools: {} }, serverInfo: { name: 'clod', version: '1.0.0' } } })
     } else if (msg.method === 'tools/list') {
-      send({ jsonrpc: '2.0', id: msg.id, result: { tools: [tool] } })
+      send({ jsonrpc: '2.0', id: msg.id, result: { tools } })
     } else if (msg.method === 'tools/call') {
-      const answer = await ask(msg.params && msg.params.arguments)
+      const name = msg.params && msg.params.name
+      const args = msg.params && msg.params.arguments
+      if (GROUP_URL && groupTools.some((t) => t.name === name)) {
+        const answer = await post(GROUP_URL, { tool: name, args }, (m) => ({ text: m, isError: true }))
+        send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: String(answer.text || '') }], isError: !!answer.isError } })
+        continue
+      }
+      const answer = await post(FOLDER_URL, args, (m) => ({ path: null, message: m }))
       const text = answer.path
         ? 'The user allowed this folder: ' + answer.path + (answer.message ? '\n' + answer.message : '')
         : (answer.message || 'The user declined. Ask them which folder they meant, or carry on without it.')

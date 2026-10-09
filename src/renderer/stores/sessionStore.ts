@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
 import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, TabGroup, TabGroupColor, Attachment, InlineImage, RunOptions, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { arrangeTabs, isTabLocked, nextGroupColor } from '../tabGroups'
+import { answerGroupTool, groupContext, shareGroupFolders } from '../groupTools'
 import { useThemeStore } from '../theme'
 import { explainError, looksLikeClodBug } from '../../shared/errors'
 import { describeRateLimit } from '../../shared/limits'
@@ -245,6 +246,12 @@ interface State {
   ungroup: (groupId: string) => void
   closeGroup: (groupId: string) => void
   newTabInGroup: (groupId: string) => Promise<void>
+  setGroupNote: (groupId: string, note: string) => void
+  /** The group whose note is being edited (shown under the tab strip) */
+  noteEditorGroupId: string | null
+  setNoteEditor: (groupId: string | null) => void
+  /** A just-made group: once it's named, ask for its note */
+  groupNotePromptId: string | null
   /** Open a copy of a conversation; it branches off with its next message */
   duplicateTab: (tabId: string) => Promise<void>
   respondPermission: (tabId: string, questionId: string, optionId: string) => void
@@ -418,6 +425,8 @@ export const useSessionStore = create<State>((set, get) => ({
   tabs: [initialTab],
   groups: [], // filled in when open tabs are restored
   tabSearchOpen: false,
+  noteEditorGroupId: null,
+  groupNotePromptId: null,
   setTabSearchOpen: (open) => set(open ? { tabSearchOpen: true, isExpanded: true } : { tabSearchOpen: false }),
   editingGroupId: null,
   activeTabId: initialTab.id,
@@ -766,7 +775,7 @@ export const useSessionStore = create<State>((set, get) => ({
       const at = rest.indexOf(target) + (after ? 1 : 0)
       // Dropped beside a grouped tab: join that group. Beside a pinned tab: become pinned.
       const moved = { ...moving, groupId: target.groupId, pinned: !target.groupId && !!target.pinned }
-      return arrangeTabs([...rest.slice(0, at), moved, ...rest.slice(at)], s.groups)
+      return arrangeTabs(shareGroupFolders([...rest.slice(0, at), moved, ...rest.slice(at)]), s.groups)
     })
   },
 
@@ -785,12 +794,16 @@ export const useSessionStore = create<State>((set, get) => ({
 
   setEditingGroup: (groupId) => set({ editingGroupId: groupId }),
 
+  setGroupNote: (groupId, note) => set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, note: note.trim().slice(0, 4000) } : g)) })),
+
+  setNoteEditor: (groupId) => set(groupId ? { noteEditorGroupId: groupId, isExpanded: true, groupNotePromptId: null } : { noteEditorGroupId: null }),
+
   createGroup: (tabId) => {
     const id = crypto.randomUUID()
     set((s) => {
       const group: TabGroup = { id, name: '', color: nextGroupColor(s.groups), collapsed: false, pinned: false }
       const tabs = s.tabs.map((t) => (t.id === tabId ? { ...t, groupId: id, pinned: false } : t))
-      return { ...arrangeTabs(tabs, [...s.groups, group]), editingGroupId: id }
+      return { ...arrangeTabs(tabs, [...s.groups, group]), editingGroupId: id, groupNotePromptId: id }
     })
     return id
   },
@@ -803,7 +816,7 @@ export const useSessionStore = create<State>((set, get) => ({
       const rest = s.tabs.filter((t) => t.id !== tabId)
       const lastIndex = rest.map((t) => t.groupId).lastIndexOf(groupId)
       const tabs = [...rest.slice(0, lastIndex + 1), { ...moving, groupId, pinned: false }, ...rest.slice(lastIndex + 1)]
-      return arrangeTabs(tabs, s.groups)
+      return arrangeTabs(shareGroupFolders(tabs), s.groups)
     })
   },
 
@@ -851,6 +864,9 @@ export const useSessionStore = create<State>((set, get) => ({
 
   newTabInGroup: async (groupId) => {
     const id = await get().createTab()
+    // Start where the group works: its first chat's folder (and all its folders, via addToGroup).
+    const base = get().tabs.find((t) => t.groupId === groupId && t.hasChosenDirectory)
+    if (base) set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, workingDirectory: base.workingDirectory, hasChosenDirectory: true } : t)) }))
     get().addToGroup(id, groupId)
     set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, collapsed: false } : g)) }))
   },
@@ -1014,6 +1030,8 @@ export const useSessionStore = create<State>((set, get) => ({
         return { ...t, folderRequest: null, currentActivity: 'Working...', additionalDirs: add ? [...t.additionalDirs, path] : t.additionalDirs }
       }),
     }))
+    // An allowed folder is shared with the rest of the tab's group.
+    set((s) => ({ tabs: shareGroupFolders(s.tabs) }))
   },
 
   respondPermission: (tabId, questionId, optionId) => {
@@ -1040,8 +1058,9 @@ export const useSessionStore = create<State>((set, get) => ({
 
   addDirectory: (dir) => {
     const { activeTabId } = get()
+    // In a group, the folder is shared with every chat in it.
     set((s) => ({
-      tabs: s.tabs.map((t) =>
+      tabs: shareGroupFolders(s.tabs.map((t) =>
         t.id === activeTabId
           ? {
               ...t,
@@ -1050,15 +1069,17 @@ export const useSessionStore = create<State>((set, get) => ({
                 : [...t.additionalDirs, dir],
             }
           : t
-      ),
+      )),
     }))
   },
 
   removeDirectory: (dir) => {
     const { activeTabId } = get()
+    // In a group, the folder is removed from every chat in it.
+    const groupId = get().tabs.find((t) => t.id === activeTabId)?.groupId
     set((s) => ({
       tabs: s.tabs.map((t) =>
-        t.id === activeTabId
+        t.id === activeTabId || (groupId && t.groupId === groupId)
           ? { ...t, additionalDirs: t.additionalDirs.filter((d) => d !== dir) }
           : t
       ),
@@ -1081,6 +1102,8 @@ export const useSessionStore = create<State>((set, get) => ({
           : t
       ),
     }))
+    // In a group, the rest of the group's folders come along (and this one is shared).
+    set((s) => ({ tabs: shareGroupFolders(s.tabs) }))
   },
 
   // ─── Attachment management ───
@@ -1266,6 +1289,7 @@ export const useSessionStore = create<State>((set, get) => ({
       model: preferredModel || undefined,
       addDirs: tab.additionalDirs.length > 0 ? tab.additionalDirs : undefined,
       images: inlineImages.length > 0 ? inlineImages : undefined,
+      groupContext: groupContext(get().groups.find((g) => g.id === tab.groupId)),
       ...branch,
     }).catch((err: Error) => {
       get().handleError(activeTabId, {
@@ -1281,6 +1305,18 @@ export const useSessionStore = create<State>((set, get) => ({
   // ─── Event handlers ───
 
   handleNormalizedEvent: (tabId, event) => {
+    // Claude used a tab group tool: answer from the tabs here.
+    if (event.type === 'group_tool') {
+      const { tabs, groups } = get()
+      const result = answerGroupTool(event.tool, event.args, tabId, tabs, groups)
+      const groupId = tabs.find((t) => t.id === tabId)?.groupId
+      if (result.note !== undefined && groupId) {
+        get().setGroupNote(groupId, result.note)
+        set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, messages: [...t.messages, { id: nextMsgId(), role: 'system' as const, content: 'Claude updated the group note.', timestamp: Date.now() }] } : t)) }))
+      }
+      window.clod.respondGroupTool(event.questionId, { text: result.text, isError: result.isError }).catch(() => {})
+      return
+    }
     // Name the tab once its first answer is in (after this event is applied).
     if (event.type === 'task_complete') queueMicrotask(() => autoTitle(tabId))
     set((s) => {

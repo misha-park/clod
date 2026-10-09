@@ -128,6 +128,15 @@ export class ControlPlane extends EventEmitter {
       this.emit('event', tabId, { type: 'folder_request', questionId, ...request } as NormalizedEvent)
     })
 
+    // Claude used a tab group tool: the overlay (which holds the tabs) answers.
+    this.permissionServer.on('group-tool', (questionId: string, tabId: string, tool: string, args: Record<string, unknown>) => {
+      if (!this.tabs.has(tabId)) {
+        this.permissionServer.respondToGroupTool(questionId, { text: 'This chat is closed.', isError: true })
+        return
+      }
+      this.emit('event', tabId, { type: 'group_tool', questionId, tool, args } as NormalizedEvent)
+    })
+
     // ─── Wire RunManager events → ControlPlane routing ───
 
     this.runManager.on('normalized', (requestId: string, event: NormalizedEvent) => {
@@ -500,6 +509,10 @@ export class ControlPlane extends EventEmitter {
   // ─── Permission Response ───
 
   /** The user's answer to a folder card: a path, or null for "not now". */
+  respondToGroupTool(questionId: string, answer: { text: string; isError?: boolean }): boolean {
+    return this.permissionServer.respondToGroupTool(questionId, answer)
+  }
+
   respondToFolder(questionId: string, path: string | null): boolean {
     return this.permissionServer.respondToFolder(questionId, path)
   }

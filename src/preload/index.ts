@@ -20,6 +20,8 @@ export interface ClodAPI {
   respondPermission(tabId: string, questionId: string, optionId: string): Promise<boolean>
   /** Answer a folder card: the chosen folder, or null for "not now" */
   respondFolder(questionId: string, path: string | null): Promise<boolean>
+  /** Answer one of Claude's tab group tools */
+  respondGroupTool(questionId: string, answer: { text: string; isError?: boolean }): Promise<boolean>
   /** Copy a conversation without the exchange after `after`; returns the copy's session id */
   deleteExchange(sessionId: string, after: string | null): Promise<string>
   /** Show a native right-click menu; resolves to the chosen item's id, or null */
@@ -102,6 +104,7 @@ const api: ClodAPI = {
   takeScreenshot: () => ipcRenderer.invoke(IPC.TAKE_SCREENSHOT),
   pasteImage: (dataUrl) => ipcRenderer.invoke(IPC.PASTE_IMAGE, dataUrl),
   respondFolder: (questionId, path) => ipcRenderer.invoke(IPC.RESPOND_FOLDER, { questionId, path }),
+  respondGroupTool: (questionId, answer) => ipcRenderer.invoke(IPC.RESPOND_GROUP_TOOL, { questionId, answer }),
   deleteExchange: (sessionId, after) => ipcRenderer.invoke(IPC.DELETE_EXCHANGE, { sessionId, after }),
   popupMenu: (items) => ipcRenderer.invoke(IPC.POPUP_MENU, items),
   suggestTitle: (prompt, reply) => ipcRenderer.invoke(IPC.SUGGEST_TITLE, { prompt, reply }),

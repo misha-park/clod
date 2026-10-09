@@ -206,6 +206,8 @@ export interface TabGroup {
   collapsed: boolean
   /** Pinned groups sit first, and their tabs can't be closed until the group is unpinned */
   pinned: boolean
+  /** Shared with every chat in the group (Claude sees it, and can update it when asked) */
+  note?: string
 }
 
 export interface Message {
@@ -253,6 +255,7 @@ export type NormalizedEvent =
   | { type: 'rate_limit'; status: string; resetsAt?: number; rateLimitType?: string }
   | { type: 'usage'; usage: UsageData }
   | { type: 'folder_request'; questionId: string; name: string; reason: string; matches: Array<{ path: string; name: string }> }
+  | { type: 'group_tool'; questionId: string; tool: 'list_group_chats' | 'read_group_chat' | 'update_group_note'; args: Record<string, unknown> }
   | { type: 'permission_request'; questionId: string; toolName: string; toolDescription?: string; toolInput?: Record<string, unknown>; options: Array<{ id: string; label: string; kind?: string }> }
 
 // ─── Run Options ───
@@ -297,6 +300,8 @@ export interface RunOptions {
   newSession?: boolean
   /** Continue `sessionId` as a copy (a duplicated tab's first message) */
   fork?: boolean
+  /** For a tab in a group: the group's name and note, added to Claude's instructions */
+  groupContext?: string
 }
 
 // ─── Control Plane Types ───
@@ -399,6 +404,7 @@ export const IPC = {
   PASTE_IMAGE: 'clod:paste-image',
   RESPOND_PERMISSION: 'clod:respond-permission',
   RESPOND_FOLDER: 'clod:respond-folder',
+  RESPOND_GROUP_TOOL: 'clod:respond-group-tool',
   DELETE_EXCHANGE: 'clod:delete-exchange',
   RESET_TAB_SESSION: 'clod:reset-tab-session',
   LIST_SESSIONS: 'clod:list-sessions',

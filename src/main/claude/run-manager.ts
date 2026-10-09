@@ -7,7 +7,7 @@ import { normalize } from './event-normalizer'
 import { buildUserContent } from './message-content'
 import { log as _log } from '../logger'
 import { getCliEnv, getClaudeEnv } from '../cli-env'
-import { FOLDER_TOOL_NAME } from '../hooks/folder-tool'
+import { CLOD_TOOL_NAMES } from '../hooks/folder-tool'
 import type { ClaudeEvent, RunOptions, EnrichedError } from '../../shared/types'
 
 const MAX_RING_LINES = 100
@@ -184,6 +184,7 @@ export class RunManager extends EventEmitter {
       maxTurns: options.maxTurns || null,
       maxBudgetUsd: options.maxBudgetUsd || null,
       systemPrompt: options.systemPrompt || null,
+      groupContext: options.groupContext || null,
     })
   }
 
@@ -308,7 +309,7 @@ export class RunManager extends EventEmitter {
       if (options.mcpConfigPath) args.push('--mcp-config', options.mcpConfigPath)
       const safeAllowed = [
         ...SAFE_TOOLS,
-        ...(options.mcpConfigPath ? [FOLDER_TOOL_NAME] : []),
+        ...(options.mcpConfigPath ? CLOD_TOOL_NAMES : []),
         ...(options.allowedTools || []),
       ]
       args.push('--allowedTools', safeAllowed.join(','))
@@ -331,7 +332,7 @@ export class RunManager extends EventEmitter {
       args.push('--system-prompt', options.systemPrompt)
     }
     // Always tell Claude it's inside CLOD (additive, doesn't replace base prompt)
-    args.push('--append-system-prompt', CLOD_SYSTEM_HINT)
+    args.push('--append-system-prompt', options.groupContext ? `${CLOD_SYSTEM_HINT}\n\n${options.groupContext}` : CLOD_SYSTEM_HINT)
 
     // Claude Code may have been installed (by Clod's setup) since launch.
     if (!this.claudeBinary.includes('/')) this.claudeBinary = this._findClaudeBinary()

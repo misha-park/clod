@@ -735,6 +735,11 @@ ipcMain.handle(IPC.DELETE_EXCHANGE, (_event, { sessionId, after }: { sessionId: 
   return forkWithoutExchange(sessionId, after)
 })
 
+ipcMain.handle(IPC.RESPOND_GROUP_TOOL, (_event, { questionId, answer }: { questionId: string; answer: { text: string; isError?: boolean } }) => {
+  if (!answer || typeof answer.text !== 'string') return false
+  return controlPlane.respondToGroupTool(String(questionId), answer)
+})
+
 ipcMain.handle(IPC.RESPOND_FOLDER, (_event, { questionId, path }: { questionId: string; path: string | null }) => {
   log(`IPC RESPOND_FOLDER: question=${questionId} ${path ? 'allowed' : 'declined'}`)
   return controlPlane.respondToFolder(String(questionId), typeof path === 'string' ? path : null)
