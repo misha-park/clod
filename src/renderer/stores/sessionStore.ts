@@ -247,6 +247,8 @@ interface State {
   closeGroup: (groupId: string) => void
   newTabInGroup: (groupId: string) => Promise<void>
   setGroupNote: (groupId: string, note: string) => void
+  /** Hide (collapse) or show every group at once */
+  setAllGroupsHidden: (hidden: boolean) => void
   /** The group whose note is being edited (shown under the tab strip) */
   noteEditorGroupId: string | null
   setNoteEditor: (groupId: string | null) => void
@@ -399,6 +401,25 @@ function errorMessage(message: string, stderrTail: string[] = []): Message {
     timestamp: Date.now(),
     ...(explained?.action ? { action: explained.action } : {}),
   }
+}
+
+/**
+ * Hide (collapse) groups. If the tab you're on is in one of them, move to the
+ * nearest tab that's still showing; when every tab is in a hidden group, open
+ * a new tab so nothing has to stay showing.
+ */
+function hideGroups(ids: Set<string>): void {
+  const s = useSessionStore.getState()
+  const groups = s.groups.map((g) => (ids.has(g.id) ? { ...g, collapsed: true } : g))
+  const hidden = new Set(groups.filter((g) => g.collapsed).map((g) => g.id))
+  const showing = (t: TabState) => !t.groupId || !hidden.has(t.groupId)
+  const active = s.tabs.find((t) => t.id === s.activeTabId)
+  if (!active || showing(active)) { useSessionStore.setState({ groups }); return }
+  const i = s.tabs.indexOf(active)
+  const next = [...s.tabs.slice(i + 1), ...s.tabs.slice(0, i).reverse()].find(showing)
+  if (next) { useSessionStore.setState({ groups, activeTabId: next.id }); return }
+  useSessionStore.setState({ groups })
+  void s.createTab()
 }
 
 /** Recently closed conversation tabs, newest last, for ⌘⇧T (this launch only). */
@@ -838,15 +859,15 @@ export const useSessionStore = create<State>((set, get) => ({
   setGroupColor: (groupId, color) => set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, color } : g)) })),
 
   toggleGroupCollapsed: (groupId) => {
-    set((s) => {
-      const groups = s.groups.map((g) => (g.id === groupId ? { ...g, collapsed: !g.collapsed } : g))
-      // Collapsing the group you're in moves you to the nearest tab outside it, if there is one.
-      const active = s.tabs.find((t) => t.id === s.activeTabId)
-      if (!groups.find((g) => g.id === groupId)?.collapsed || active?.groupId !== groupId) return { groups }
-      const i = s.tabs.indexOf(active)
-      const outside = [...s.tabs.slice(i + 1), ...s.tabs.slice(0, i).reverse()].find((t) => t.groupId !== groupId)
-      return outside ? { groups, activeTabId: outside.id } : { groups }
-    })
+    const group = get().groups.find((g) => g.id === groupId)
+    if (!group) return
+    if (group.collapsed) set((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, collapsed: false } : g)) }))
+    else hideGroups(new Set([groupId]))
+  },
+
+  setAllGroupsHidden: (hidden) => {
+    if (hidden) hideGroups(new Set(get().groups.map((g) => g.id)))
+    else set((s) => ({ groups: s.groups.map((g) => ({ ...g, collapsed: false })) }))
   },
 
   toggleGroupPin: (groupId) => {

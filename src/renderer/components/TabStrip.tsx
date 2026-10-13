@@ -256,6 +256,8 @@ export function TabStrip() {
       { type: 'separator' },
       { id: 'new-tab', label: 'New Tab in Group' },
       { id: 'collapse', label: group.collapsed ? 'Show Group' : 'Hide Group' },
+      ...(s.groups.some((g) => !g.collapsed) ? [{ id: 'hide-all', label: 'Hide All Groups' }] : []),
+      ...(s.groups.some((g) => g.collapsed) ? [{ id: 'show-all', label: 'Show All Groups' }] : []),
       { id: 'ungroup', label: 'Ungroup' },
       { type: 'separator' },
       { id: 'close', label: 'Close Group', enabled: !group.pinned },
@@ -266,6 +268,8 @@ export function TabStrip() {
     else if (action === 'pin') s.toggleGroupPin(group.id)
     else if (action === 'new-tab') s.newTabInGroup(group.id)
     else if (action === 'collapse') s.toggleGroupCollapsed(group.id)
+    else if (action === 'hide-all') s.setAllGroupsHidden(true)
+    else if (action === 'show-all') s.setAllGroupsHidden(false)
     else if (action === 'ungroup') s.ungroup(group.id)
     else if (action === 'close') s.closeGroup(group.id)
   }
