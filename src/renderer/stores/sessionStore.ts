@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { loadInitialSettings, persistSettings, onExternalSettingsChange } from '../settings-sync'
-import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, TabGroup, TabGroupColor, Attachment, InlineImage, RunOptions, CatalogPlugin, PluginStatus } from '../../shared/types'
+import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, TabGroup, TabGroupColor, Effort, Attachment, InlineImage, RunOptions, CatalogPlugin, PluginStatus } from '../../shared/types'
 import { arrangeTabs, isTabLocked, nextGroupColor } from '../tabGroups'
 import { answerGroupTool, groupContext, shareGroupFolders } from '../groupTools'
+import { defaultEffortFor } from '../../shared/effort'
 import { useThemeStore } from '../theme'
 import { explainError, looksLikeClodBug } from '../../shared/errors'
 import { describeRateLimit } from '../../shared/limits'
@@ -221,6 +222,9 @@ interface State {
   /** Remove a prompt and Claude's answer to it; Claude forgets them too */
   deleteExchange: (messageId: string) => Promise<void>
   togglePin: (tabId: string) => void
+  /** Change a tab's model; its effort goes back to that model's default */
+  setTabModel: (tabId: string, model: string) => void
+  setTabEffort: (tabId: string, effort: Effort) => void
   /** The tab search (⌘K) is showing */
   tabSearchOpen: boolean
   setTabSearchOpen: (open: boolean) => void
@@ -363,7 +367,7 @@ async function buildResumedTab(sessionId: string, title?: string, projectPath?: 
 const OPEN_TABS_KEY = 'clod-open-tabs'
 
 interface SavedTabs {
-  tabs: Array<{ sessionId: string; title: string; projectPath: string; pinned?: boolean; fork?: boolean; forkAt?: string | null; groupId?: string }>
+  tabs: Array<{ sessionId: string; title: string; projectPath: string; pinned?: boolean; fork?: boolean; forkAt?: string | null; groupId?: string; model?: string; effort?: Effort }>
   activeSessionId: string | null
   groups: TabGroup[]
 }
@@ -420,6 +424,11 @@ function hideGroups(ids: Set<string>): void {
   if (next) { useSessionStore.setState({ groups, activeTabId: next.id }); return }
   useSessionStore.setState({ groups })
   void s.createTab()
+}
+
+/** The model a tab uses: its own choice, else the default model from Settings (Sonnet if none). */
+export function tabModel(tab: TabState | undefined, preferredModel: string | null): string {
+  return tab?.model || preferredModel || 'sonnet'
 }
 
 /** Recently closed conversation tabs, newest last, for ⌘⇧T (this launch only). */
@@ -763,6 +772,10 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
   },
 
+  setTabModel: (tabId, model) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, model, effort: undefined } : t)) })),
+
+  setTabEffort: (tabId, effort) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, effort } : t)) })),
+
   togglePin: (tabId) => {
     // Pinned tabs sit first, in their existing order. A pinned tab stands on
     // its own, so pinning one takes it out of its group.
@@ -910,6 +923,8 @@ export const useSessionStore = create<State>((set, get) => ({
       forkOnNextSend: true,
       groupId: src.groupId,
       autoTitled: src.autoTitled,
+      model: src.model,
+      effort: src.effort,
     }
     set((s) => {
       const tabs = [...s.tabs]
@@ -966,6 +981,8 @@ export const useSessionStore = create<State>((set, get) => ({
         ...(t.pinned ? { pinned: true } : {}),
         ...(t.fork ? { forkOnNextSend: true } : {}),
         ...(t.groupId ? { groupId: t.groupId } : {}),
+        ...(typeof t.model === 'string' ? { model: t.model } : {}),
+        ...(typeof t.effort === 'string' ? { effort: t.effort } : {}),
       }, t.fork ? t.forkAt : undefined)
       // Skip conversations that no longer exist (e.g. removed by cleanup).
       if (tab && tab.messages.length > 0) restored.push(tab)
@@ -1302,12 +1319,15 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
 
     // Send to backend — ControlPlane will queue if a run is active
-    const { preferredModel } = get()
+    // This tab's model and effort (new tabs: the default model, at its default effort).
+    const model = tabModel(tab, get().preferredModel)
+    const effort = tab.effort ?? defaultEffortFor(model)
     window.clod.prompt(activeTabId, requestId, {
       prompt: fullPrompt,
       projectPath: resolvedPath,
       sessionId: tab.claudeSessionId || undefined,
-      model: preferredModel || undefined,
+      model,
+      effort,
       addDirs: tab.additionalDirs.length > 0 ? tab.additionalDirs : undefined,
       images: inlineImages.length > 0 ? inlineImages : undefined,
       groupContext: groupContext(get().groups.find((g) => g.id === tab.groupId)),
@@ -1671,6 +1691,8 @@ useSessionStore.subscribe((state) => {
       ...(t.pinned ? { pinned: true } : {}),
       ...(t.forkOnNextSend ? { fork: true, forkAt: t.lastAssistantUuid ?? null } : {}),
       ...(t.groupId ? { groupId: t.groupId } : {}),
+      ...(t.model ? { model: t.model } : {}),
+      ...(t.effort ? { effort: t.effort } : {}),
     }))
   const active = state.tabs.find((t) => t.id === state.activeTabId)?.claudeSessionId ?? null
   const groups = state.groups.filter((g) => tabs.some((t) => t.groupId === g.id))

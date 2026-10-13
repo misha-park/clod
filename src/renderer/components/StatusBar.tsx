@@ -3,19 +3,26 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { CaretDown, Check, FolderOpen, Plus, X, ShieldCheck } from '@phosphor-icons/react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useSessionStore, AVAILABLE_MODELS, getModelDisplayLabel } from '../stores/sessionStore'
+import { useSessionStore, AVAILABLE_MODELS, getModelDisplayLabel, tabModel } from '../stores/sessionStore'
+import { EFFORTS, defaultEffortFor, effortLabel } from '../../shared/effort'
+import type { Effort } from '../../shared/types'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors } from '../theme'
 
-/* ─── Model Picker (inline — tightly coupled to StatusBar) ─── */
+/* ─── Chip pickers (model, effort): a chip that opens a short list above it ─── */
 
-function ModelPicker() {
-  const preferredModel = useSessionStore((s) => s.preferredModel)
-  const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
+function ChipPicker({ label, title, options, selected, onSelect, width = 192 }: {
+  label: string
+  title: string
+  options: ReadonlyArray<{ id: string; label: string; hint?: string }>
+  selected: string | undefined
+  onSelect: (id: string) => void
+  width?: number
+}) {
   const tab = useStoreWithEqualityFn(
     useSessionStore,
     (s) => s.tabs.find((t) => t.id === s.activeTabId),
-    (a, b) => a === b || (!!a && !!b && a.status === b.status && a.sessionModel === b.sessionModel),
+    (a, b) => a === b || (!!a && !!b && a.status === b.status),
   )
   const popoverLayer = usePopoverLayer()
   const colors = useColors()
@@ -54,17 +61,6 @@ function ModelPicker() {
     setOpen((o) => !o)
   }
 
-  const activeLabel = (() => {
-    if (preferredModel) {
-      const m = AVAILABLE_MODELS.find((m) => m.id === preferredModel)
-      return m?.label || getModelDisplayLabel(preferredModel)
-    }
-    if (tab?.sessionModel) {
-      return getModelDisplayLabel(tab.sessionModel)
-    }
-    return AVAILABLE_MODELS[0].label
-  })()
-
   return (
     <>
       <button
@@ -78,9 +74,9 @@ function ModelPicker() {
           padding: '0 11px',
           border: `1px solid ${colors.containerBorder}`,
         }}
-        title={isBusy ? 'Stop the task to change model' : 'Switch model'}
+        title={isBusy ? 'Stop the task to change this' : title}
       >
-        {activeLabel}
+        {label}
         <CaretDown size={10} style={{ opacity: 0.6 }} />
       </button>
 
@@ -97,7 +93,7 @@ function ModelPicker() {
             position: 'fixed',
             bottom: pos.bottom,
             left: pos.left,
-            width: 192,
+            width,
             pointerEvents: 'auto',
             background: colors.popoverBg,
             backdropFilter: 'blur(20px)',
@@ -107,19 +103,22 @@ function ModelPicker() {
           }}
         >
           <div className="py-1">
-            {AVAILABLE_MODELS.map((m) => {
-              const isSelected = preferredModel === m.id || (!preferredModel && m.id === AVAILABLE_MODELS[0].id)
+            {options.map((o) => {
+              const isSelected = selected === o.id
               return (
                 <button
-                  key={m.id}
-                  onClick={() => { setPreferredModel(m.id); setOpen(false) }}
+                  key={o.id}
+                  onClick={() => { onSelect(o.id); setOpen(false) }}
                   className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
                   style={{
                     color: isSelected ? colors.textPrimary : colors.textSecondary,
                     fontWeight: isSelected ? 600 : 400,
                   }}
                 >
-                  {m.label}
+                  <span>
+                    {o.label}
+                    {o.hint && <span style={{ color: colors.textTertiary, fontWeight: 400 }}> · {o.hint}</span>}
+                  </span>
                   {isSelected && <Check size={12} style={{ color: colors.accent }} />}
                 </button>
               )
@@ -129,6 +128,44 @@ function ModelPicker() {
         popoverLayer,
       )}
     </>
+  )
+}
+
+/** This tab's model. New tabs start on the default model from Settings. */
+function ModelPicker() {
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+  const preferredModel = useSessionStore((s) => s.preferredModel)
+  const setTabModel = useSessionStore((s) => s.setTabModel)
+  const model = tabModel(tab, preferredModel)
+  const label = AVAILABLE_MODELS.find((m) => m.id === model)?.label || getModelDisplayLabel(model)
+  return (
+    <ChipPicker
+      label={label}
+      title="Switch model for this tab"
+      options={AVAILABLE_MODELS}
+      selected={model}
+      onSelect={(id) => { if (tab) setTabModel(tab.id, id) }}
+    />
+  )
+}
+
+/** This tab's effort: how hard the model thinks. Starts at the model's default. */
+function EffortPicker() {
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+  const preferredModel = useSessionStore((s) => s.preferredModel)
+  const setTabEffort = useSessionStore((s) => s.setTabEffort)
+  const model = tabModel(tab, preferredModel)
+  const fallback = defaultEffortFor(model)
+  const effort = tab?.effort ?? fallback
+  return (
+    <ChipPicker
+      label={effortLabel(effort)}
+      title="Effort: how hard Claude thinks. Higher is more careful, but slower and uses more of your plan"
+      options={EFFORTS.map((e) => ({ ...e, hint: e.id === fallback ? 'default' : undefined }))}
+      selected={effort}
+      onSelect={(id) => { if (tab) setTabEffort(tab.id, id as Effort) }}
+      width={168}
+    />
   )
 }
 
@@ -436,6 +473,7 @@ export function StatusBar() {
         )}
 
         <ModelPicker />
+        <EffortPicker />
 
         <PermissionModePicker />
       </div>

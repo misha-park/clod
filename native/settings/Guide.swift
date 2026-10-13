@@ -88,7 +88,8 @@ struct GuideTopic: Identifiable {
             "Pinned groups sit first, and their tabs can't be closed until you unpin the group.",
         ]),
         GuideTopic(title: "Models and permissions", symbol: "checkmark.shield.fill", color: .green, tips: [
-            "Pick the model with the chip above the message bar. Clod always uses the newest version of each.",
+            "Pick the model with the chip above the message bar. Clod always uses the newest version of each. Each tab keeps its own model, and new tabs start on your default model (in **Claude**).",
+            "The chip beside it sets **effort**: how hard Claude thinks. Higher is more careful, but slower and uses more of your plan. Sonnet starts at High and Opus at Medium.",
             "In **Ask** mode, Clod shows a card before Claude edits files or runs commands, so you can allow or deny it.",
             "In **Auto** mode, Claude goes ahead without asking. Only use it for work you trust.",
         ]),

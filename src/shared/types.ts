@@ -184,6 +184,10 @@ export interface TabState {
   groupId?: string
   /** Whether the tab has been given a short title from its first answer (or never needs one) */
   autoTitled?: boolean
+  /** This tab's model (a CLI alias); unset = the default model from Settings */
+  model?: string
+  /** This tab's effort; unset = the model's default (see defaultEffortFor) */
+  effort?: Effort
 }
 
 /** An item of a native right-click menu (see POPUP_MENU); `id` is what a click returns */
@@ -195,6 +199,9 @@ export interface MenuItemSpec {
   checked?: boolean
   submenu?: MenuItemSpec[]
 }
+
+/** Claude Code's effort levels (--effort): how hard the model thinks */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export type TabGroupColor = 'grey' | 'blue' | 'green' | 'yellow' | 'orange' | 'red' | 'purple'
 
@@ -302,6 +309,8 @@ export interface RunOptions {
   fork?: boolean
   /** For a tab in a group: the group's name and note, added to Claude's instructions */
   groupContext?: string
+  /** --effort; left out, Claude Code uses its own default for the model */
+  effort?: Effort
 }
 
 // ─── Control Plane Types ───

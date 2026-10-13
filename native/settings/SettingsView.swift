@@ -305,7 +305,7 @@ struct SettingsView: View {
                 RowLabel("Auto-approve tools", symbol: "checkmark.shield.fill", color: .green)
             }
         } footer: {
-            Text("Auto-approve lets Claude run tools without asking first.").foregroundStyle(.secondary)
+            Text("New tabs start on the default model. Sonnet starts at high effort and Opus at medium; change either for a tab with the chips above the message bar. Auto-approve lets Claude run tools without asking first.").foregroundStyle(.secondary)
         }
     }
 

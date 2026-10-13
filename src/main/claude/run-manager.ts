@@ -185,6 +185,7 @@ export class RunManager extends EventEmitter {
       maxBudgetUsd: options.maxBudgetUsd || null,
       systemPrompt: options.systemPrompt || null,
       groupContext: options.groupContext || null,
+      effort: options.effort || null,
     })
   }
 
@@ -293,6 +294,9 @@ export class RunManager extends EventEmitter {
     }
     if (options.model) {
       args.push('--model', options.model)
+    }
+    if (options.effort) {
+      args.push('--effort', options.effort)
     }
     if (options.addDirs && options.addDirs.length > 0) {
       for (const dir of options.addDirs) {
