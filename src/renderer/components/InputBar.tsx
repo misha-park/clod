@@ -10,9 +10,6 @@ import { useColors, useThemeStore, DEFAULT_PLACEHOLDER } from '../theme'
 
 const INPUT_MIN_HEIGHT = 20
 const INPUT_MAX_HEIGHT = 140
-const MULTILINE_ENTER_HEIGHT = 52
-const MULTILINE_EXIT_HEIGHT = 50
-const INLINE_CONTROLS_RESERVED_WIDTH = 104
 
 /**
  * InputBar renders inside a glass-surface rounded-full pill provided by App.tsx.
@@ -25,10 +22,8 @@ export function InputBar() {
   const [input, setInput] = useState('')
   const [slashFilter, setSlashFilter] = useState<string | null>(null)
   const [slashIndex, setSlashIndex] = useState(0)
-  const [isMultiLine, setIsMultiLine] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const measureRef = useRef<HTMLTextAreaElement | null>(null)
 
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const runShellCommand = useSessionStore((s) => s.runShellCommand)
@@ -104,51 +99,6 @@ export function InputBar() {
     return unsub
   }, [])
 
-  const measureInlineHeight = useCallback((value: string): number => {
-    if (typeof document === 'undefined') return 0
-    if (!measureRef.current) {
-      const m = document.createElement('textarea')
-      m.setAttribute('aria-hidden', 'true')
-      m.tabIndex = -1
-      m.style.position = 'absolute'
-      m.style.top = '-99999px'
-      m.style.left = '0'
-      m.style.height = '0'
-      m.style.minHeight = '0'
-      m.style.overflow = 'hidden'
-      m.style.visibility = 'hidden'
-      m.style.pointerEvents = 'none'
-      m.style.zIndex = '-1'
-      m.style.resize = 'none'
-      m.style.border = '0'
-      m.style.outline = '0'
-      m.style.boxSizing = 'border-box'
-      document.body.appendChild(m)
-      measureRef.current = m
-    }
-
-    const m = measureRef.current
-    const hostWidth = wrapperRef.current?.clientWidth ?? 0
-    const inlineWidth = Math.max(120, hostWidth - INLINE_CONTROLS_RESERVED_WIDTH)
-    m.style.width = `${inlineWidth}px`
-    m.style.fontSize = '14px'
-    m.style.lineHeight = '20px'
-    m.style.paddingTop = '15px'
-    m.style.paddingBottom = '15px'
-    m.style.paddingLeft = '0'
-    m.style.paddingRight = '0'
-
-    const computed = textareaRef.current ? window.getComputedStyle(textareaRef.current) : null
-    if (computed) {
-      m.style.fontFamily = computed.fontFamily
-      m.style.letterSpacing = computed.letterSpacing
-      m.style.fontWeight = computed.fontWeight
-    }
-
-    m.value = value || ' '
-    return m.scrollHeight
-  }, [])
-
   const autoResize = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
@@ -160,25 +110,9 @@ export function InputBar() {
     if (naturalHeight <= INPUT_MAX_HEIGHT) {
       el.scrollTop = 0
     }
-    // Decide multiline mode against fixed inline-width measurement to avoid
-    // expand/collapse bounce when layout switches between modes.
-    const inlineHeight = measureInlineHeight(input)
-    setIsMultiLine((prev) => {
-      if (!prev) return inlineHeight > MULTILINE_ENTER_HEIGHT
-      return inlineHeight > MULTILINE_EXIT_HEIGHT
-    })
-  }, [input, measureInlineHeight])
-
-  useLayoutEffect(() => { autoResize() }, [input, isMultiLine, autoResize])
-
-  useEffect(() => {
-    return () => {
-      if (measureRef.current) {
-        measureRef.current.remove()
-        measureRef.current = null
-      }
-    }
   }, [])
+
+  useLayoutEffect(() => { autoResize() }, [input, autoResize])
 
   // ─── Slash command detection ───
   const updateSlashFilter = useCallback((value: string) => {
@@ -410,103 +344,55 @@ export function InputBar() {
         </div>
       )}
 
-      {/* Single-line: inline controls. Multi-line: controls in bottom row */}
+      {/* The buttons stay on the first line, at the right; long text wraps
+          before them and grows downwards. */}
       <div className="w-full" style={{ minHeight: 50 }}>
-        {isMultiLine ? (
-          <div className="w-full">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder={
-                isConnecting
-                  ? 'Initializing...'
-                  : isBusy
-                    ? 'Type to queue a message...'
-                    : inputPlaceholder
-              }
-              rows={1}
-              className="w-full bg-transparent resize-none"
-              style={{
-                fontSize: 14,
-                lineHeight: '20px',
-                color: colors.textPrimary,
-                minHeight: 20,
-                maxHeight: INPUT_MAX_HEIGHT,
-                paddingTop: 11,
-                paddingBottom: 2,
-              }}
-            />
+        <div className="flex items-start w-full" style={{ minHeight: 50 }}>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={
+              isConnecting
+                ? 'Initializing...'
+                : isBusy
+                  ? 'Type to queue a message...'
+                  : inputPlaceholder
+            }
+            rows={1}
+            className="flex-1 bg-transparent resize-none"
+            style={{
+              fontSize: 14,
+              lineHeight: '20px',
+              color: colors.textPrimary,
+              minHeight: 20,
+              maxHeight: INPUT_MAX_HEIGHT,
+              paddingTop: 15,
+              paddingBottom: 15,
+            }}
+          />
 
-            <div className="flex items-center justify-end gap-1" style={{ marginTop: 0, paddingBottom: 6 }}>
-              <AttachControls colors={colors} disabled={isBusy} onScreenshot={handleScreenshot} onAttach={handleAttachFile} />
-              <AnimatePresence>
-                {canSend && (
-                  <motion.div key="send" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ duration: 0.1 }}>
-                    <button
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={handleSend}
-                      className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
-                      style={{ background: colors.sendBg, color: colors.textOnAccent }}
-                      title={isBusy ? 'Queue message' : 'Send (Enter)'}
-                    >
-                      <ArrowUp size={16} weight="bold" />
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+          <div className="flex items-center gap-1 shrink-0 ml-2" style={{ marginTop: 7 }}>
+            <AttachControls colors={colors} disabled={isBusy} onScreenshot={handleScreenshot} onAttach={handleAttachFile} />
+            <AnimatePresence>
+              {canSend && (
+                <motion.div key="send" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ duration: 0.1 }}>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={handleSend}
+                    className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+                    style={{ background: colors.sendBg, color: colors.textOnAccent }}
+                    title={isBusy ? 'Queue message' : 'Send (Enter)'}
+                  >
+                    <ArrowUp size={16} weight="bold" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        ) : (
-          <div className="flex items-center w-full" style={{ minHeight: 50 }}>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder={
-                isConnecting
-                  ? 'Initializing...'
-                  : isBusy
-                    ? 'Type to queue a message...'
-                    : inputPlaceholder
-              }
-              rows={1}
-              className="flex-1 bg-transparent resize-none"
-              style={{
-                fontSize: 14,
-                lineHeight: '20px',
-                color: colors.textPrimary,
-                minHeight: 20,
-                maxHeight: INPUT_MAX_HEIGHT,
-                paddingTop: 15,
-                paddingBottom: 15,
-              }}
-            />
-
-            <div className="flex items-center gap-1 shrink-0 ml-2">
-              <AttachControls colors={colors} disabled={isBusy} onScreenshot={handleScreenshot} onAttach={handleAttachFile} />
-              <AnimatePresence>
-                {canSend && (
-                  <motion.div key="send" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ duration: 0.1 }}>
-                    <button
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={handleSend}
-                      className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
-                      style={{ background: colors.sendBg, color: colors.textOnAccent }}
-                      title={isBusy ? 'Queue message' : 'Send (Enter)'}
-                    >
-                      <ArrowUp size={16} weight="bold" />
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   )
