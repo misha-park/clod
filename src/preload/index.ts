@@ -15,6 +15,8 @@ export interface ClodAPI {
   openExternal(url: string): Promise<boolean>
   openInTerminal(sessionId: string | null, projectPath?: string): Promise<boolean>
   attachFiles(): Promise<Attachment[] | null>
+  /** Attachments for files dropped onto Clod (folders are skipped) */
+  attachPaths(paths: string[]): Promise<Attachment[]>
   takeScreenshot(): Promise<Attachment | null>
   pasteImage(dataUrl: string): Promise<Attachment | null>
   respondPermission(tabId: string, questionId: string, optionId: string): Promise<boolean>
@@ -101,6 +103,7 @@ const api: ClodAPI = {
   openExternal: (url) => ipcRenderer.invoke(IPC.OPEN_EXTERNAL, url),
   openInTerminal: (sessionId, projectPath) => ipcRenderer.invoke(IPC.OPEN_IN_TERMINAL, { sessionId, projectPath }),
   attachFiles: () => ipcRenderer.invoke(IPC.ATTACH_FILES),
+  attachPaths: (paths) => ipcRenderer.invoke(IPC.ATTACH_PATHS, paths),
   takeScreenshot: () => ipcRenderer.invoke(IPC.TAKE_SCREENSHOT),
   pasteImage: (dataUrl) => ipcRenderer.invoke(IPC.PASTE_IMAGE, dataUrl),
   respondFolder: (questionId, path) => ipcRenderer.invoke(IPC.RESPOND_FOLDER, { questionId, path }),

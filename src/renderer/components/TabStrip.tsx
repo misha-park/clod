@@ -388,7 +388,7 @@ export function TabStrip() {
                       >
                         <PushPin size={10} weight={tab.pinned ? 'fill' : 'regular'} />
                       </button>
-                      {tabs.length > 1 && !isTabLocked(tab, groups) && (
+                      {(tabs.length > 1 || !!tab.groupId || tab.messages.length > 0) && !isTabLocked(tab, groups) && (
                         <button
                           onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
                           className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, session, clipboard } from 'electron'
-import { join } from 'path'
-import { existsSync, readdirSync, statSync, createReadStream, mkdirSync, unlinkSync } from 'fs'
+import { basename, extname, join } from 'path'
+import { existsSync, readdirSync, readFileSync, statSync, createReadStream, mkdirSync, unlinkSync } from 'fs'
 import { createInterface } from 'readline'
 import { homedir } from 'os'
 import { ControlPlane } from './claude/control-plane'
@@ -16,7 +16,7 @@ import { describeSetup } from './setup'
 import { IPC } from '../shared/types'
 import { APP_SHORTCUTS, matchesAccelerator, resolveShortcuts } from '../shared/shortcuts'
 import { forkWithoutExchange } from './claude/transcript-edit'
-import type { RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage, MenuItemSpec } from '../shared/types'
+import type { Attachment, RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage, MenuItemSpec } from '../shared/types'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
 import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, validPresetWidth, windowSizeFor } from '../shared/layout'
@@ -1082,9 +1082,21 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
     : await dialog.showOpenDialog(mainWindow, options)
   if (result.canceled || result.filePaths.length === 0) return null
 
-  const { basename, extname } = require('path')
-  const { readFileSync, statSync } = require('fs')
+  return attachmentsFor(result.filePaths)
+})
 
+// Files dragged onto Clod: attach them like the paperclip does (folders aren't files).
+ipcMain.handle(IPC.ATTACH_PATHS, (_event, paths: unknown) => {
+  if (!Array.isArray(paths)) return []
+  const files = paths.filter((p): p is string => {
+    if (typeof p !== 'string' || !p.startsWith('/')) return false
+    try { return statSync(p).isFile() } catch { return false }
+  })
+  return attachmentsFor(files.slice(0, 20))
+})
+
+/** Attachments for files on disk, with a preview for small images. */
+function attachmentsFor(filePaths: string[]): Attachment[] {
   const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
   const mimeMap: Record<string, string> = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -1093,7 +1105,7 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
     '.json': 'application/json', '.yaml': 'text/yaml', '.toml': 'text/toml',
   }
 
-  return result.filePaths.map((fp: string) => {
+  return filePaths.map((fp: string) => {
     const ext = extname(fp).toLowerCase()
     const mime = mimeMap[ext] || 'application/octet-stream'
     const stat = statSync(fp)
@@ -1109,7 +1121,7 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
 
     return {
       id: crypto.randomUUID(),
-      type: IMAGE_EXTS.has(ext) ? 'image' : 'file',
+      type: (IMAGE_EXTS.has(ext) ? 'image' : 'file') as Attachment['type'],
       name: basename(fp),
       path: fp,
       mimeType: mime,
@@ -1117,7 +1129,7 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
       size: stat.size,
     }
   })
-})
+}
 
 ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
   if (!mainWindow) return null

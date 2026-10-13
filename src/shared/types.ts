@@ -399,6 +399,7 @@ export const IPC = {
   SELECT_DIRECTORY: 'clod:select-directory',
   OPEN_EXTERNAL: 'clod:open-external',
   OPEN_IN_TERMINAL: 'clod:open-in-terminal',
+  ATTACH_PATHS: 'clod:attach-paths',
   ATTACH_FILES: 'clod:attach-files',
   TAKE_SCREENSHOT: 'clod:take-screenshot',
   PASTE_IMAGE: 'clod:paste-image',

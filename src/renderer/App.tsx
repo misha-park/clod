@@ -24,6 +24,9 @@ import { useColors, useThemeStore } from './theme'
 /** Top corner radius of the Clod card: concentric with the tab pills and the button group inside it. (Was 34 expanded, 30 compact.) */
 const WINDOW_TOP_RADIUS = 22
 
+/** Height the card's body keeps while the tab search or a group note box is open. */
+const POPUP_ROOM = 260
+
 const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
 
 export default function App() {
@@ -402,7 +405,7 @@ export default function App() {
                   color: colors.accent,
                 }}
               >
-                Drop a folder to work in it
+                Drop files to attach them, or a folder to work in it
               </div>
             )}
             <ResizeHandles
@@ -433,7 +436,9 @@ export default function App() {
                   <SessionBrowser variant="card" />
                 </div>
               ) : (
-                <div style={{ maxHeight: bodyMaxHeight }}>
+                // Room for the tab search or a group note box, which sit over
+                // the conversation, even on an empty tab.
+                <div style={{ maxHeight: Math.max(bodyMaxHeight, POPUP_ROOM), minHeight: tabSearchOpen || noteEditorOpen ? POPUP_ROOM : undefined }}>
                   <ConversationView />
                   <StatusBar />
                 </div>

@@ -142,7 +142,7 @@ export function ConversationView() {
   const showInterrupt = isRunning && tab.messages.some((m) => m.role === 'user')
 
   if (tab.messages.length === 0) {
-    return <EmptyState />
+    return <EmptyState height={convSize.customHeight ? convSize.conversationHeight : undefined} />
   }
 
   // Messages from before initial render cap are "historical" — no motion
@@ -298,7 +298,8 @@ export function ConversationView() {
 
 // ─── Empty State (directory picker before first message) ───
 
-function EmptyState() {
+/** `height`: the card's resized height, so an empty tab can be any size too. */
+function EmptyState({ height }: { height?: number }) {
   const setBaseDirectory = useSessionStore((s) => s.setBaseDirectory)
   const colors = useColors()
 
@@ -312,7 +313,7 @@ function EmptyState() {
   return (
     <div
       className="flex flex-col items-center justify-center px-4 py-3 gap-1.5"
-      style={{ minHeight: 80 }}
+      style={height ? { height } : { minHeight: 80 }}
     >
       <button
         onClick={handleChooseFolder}
