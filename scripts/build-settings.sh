@@ -14,10 +14,25 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "Compiling ${NAME}…"
-xcrun swiftc -O -parse-as-library \
-  -target arm64-apple-macos13.0 \
-  -o "$APP/Contents/MacOS/${NAME}" \
-  "$SRC"/*.swift
+compile_settings() {
+  xcrun swiftc -O -parse-as-library \
+    -target arm64-apple-macos13.0 \
+    "$@" \
+    -o "$APP/Contents/MacOS/${NAME}" \
+    "$SRC"/*.swift
+}
+# Some Command Line Tools releases ship an SDK whose SwiftUI needs a macro
+# plugin they don't include ("plugin for module 'SwiftUIMacros' not found").
+# If the default SDK fails, try the other installed SDKs, newest first.
+if ! compile_settings 2>/tmp/clod-settings-build.log; then
+  built=""
+  SDKS="$(dirname "$(xcrun --show-sdk-path)")"
+  for sdk in $(ls -d "$SDKS"/MacOSX[0-9]*.sdk 2>/dev/null | sort -V -r); do
+    echo "  Default SDK failed; trying $(basename "$sdk")…"
+    if compile_settings -sdk "$sdk" 2>/dev/null; then built=1; break; fi
+  done
+  if [ -z "$built" ]; then cat /tmp/clod-settings-build.log >&2; exit 1; fi
+fi
 
 cp resources/icon.icns "$APP/Contents/Resources/AppIcon.icns"
 

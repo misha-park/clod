@@ -14,9 +14,10 @@ import { DEFAULT_EXPLAIN_SHORTCUT, registerExplainShortcut } from './explain-sel
 import { configureReports, noteProblem, problemDetected, reportProblem } from './report'
 import { describeSetup } from './setup'
 import { IPC } from '../shared/types'
-import { APP_SHORTCUTS, matchesAccelerator, resolveShortcuts } from '../shared/shortcuts'
+import { APP_SHORTCUTS, matchesAccelerator, resolveShortcuts, type AppShortcutId } from '../shared/shortcuts'
 import { forkWithoutExchange } from './claude/transcript-edit'
 import type { Attachment, RunOptions, NormalizedEvent, EnrichedError, SessionLoadMessage, MenuItemSpec } from '../shared/types'
+import { claimKeysWhileFocused } from './focused-keys'
 import { registerOptionDoubleTap, restartOptionDoubleTap, stopOptionDoubleTap } from './option-double-tap'
 import { getSettings, saveSettings, watchSettings, publishState, settingsFileExisted } from './settings-file'
 import { BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, overlaySize, validPresetWidth, windowSizeFor } from '../shared/layout'
@@ -249,8 +250,13 @@ function createWindow(): void {
     const hit = APP_SHORTCUTS.find((s) => matchesAccelerator(shortcuts[s.id], input))
     if (!hit) return
     event.preventDefault()
-    if (hit.id === 'openSettings') openSettingsApp()
-    else mainWindow?.webContents.send(IPC.TAB_SHORTCUT, hit.id)
+    runAppShortcut(hit.id)
+  })
+  // ⌘ keys never reach that listener when the app behind Clod has a menu
+  // item for them (⌘V, ⌘C, ⌘W...), so claim them while Clod has the keyboard.
+  claimKeysWhileFocused(mainWindow, () => {
+    const shortcuts = resolveShortcuts(getSettings().shortcuts)
+    return APP_SHORTCUTS.map((s): [string, () => void] => [shortcuts[s.id], () => runAppShortcut(s.id)])
   })
 
   // If the overlay's process crashes, bring it back and offer to report it.
@@ -392,6 +398,11 @@ function startCursorTracking(): void {
     last = key
     mainWindow.webContents.send(IPC.CURSOR_POINT, inside ? { x: p.x - b.x, y: p.y - b.y } : null)
   }, 50)
+}
+
+function runAppShortcut(id: AppShortcutId): void {
+  if (id === 'openSettings') openSettingsApp()
+  else mainWindow?.webContents.send(IPC.TAB_SHORTCUT, id)
 }
 
 function showWindow(source = 'unknown'): void {
